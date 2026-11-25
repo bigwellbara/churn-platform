@@ -1,0 +1,37 @@
+# Local stack: `docker compose up -d --build`, then open http://localhost:8000/docs
+# Prometheus and Grafana are added in Week 3.
+name: churn-platform
+
+services:
+  api:
+    build: .
+    image: churn-api:local
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://churn:${POSTGRES_PASSWORD:-churn}@db:5432/churn
+      LOG_LEVEL: INFO
+      # API_KEY: set this to require an X-API-Key header on /predict endpoints
+    depends_on:
+      db:
+        condition: service_healthy   # wait until Postgres accepts connections
+    restart: unless-stopped
+
+  db:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_USER: churn
+      # Local development default only. In the cloud the password comes from a secret store.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-churn}
+      POSTGRES_DB: churn
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # survives `docker compose down` (not `down -v`)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U churn -d churn"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:

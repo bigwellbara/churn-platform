@@ -1,0 +1,48 @@
+{
+  "model_name": "churn-model",
+  "model_version": "1",
+  "exported_from": "version 1",
+  "model_type": "xgboost_tuned",
+  "decision_threshold": 0.6055,
+  "run_id": "7d30293c6bcc4694b85f423b50bbd89c",
+  "exported_at": "2026-11-25T10:01:14+00:00",
+  "features": [
+    "tenure",
+    "MonthlyCharges",
+    "TotalCharges",
+    "gender",
+    "SeniorCitizen",
+    "Partner",
+    "Dependents",
+    "PhoneService",
+    "MultipleLines",
+    "InternetService",
+    "OnlineSecurity",
+    "OnlineBackup",
+    "DeviceProtection",
+    "TechSupport",
+    "StreamingTV",
+    "StreamingMovies",
+    "Contract",
+    "PaperlessBilling",
+    "PaymentMethod"
+  ],
+  "test_metrics": {
+    "accuracy": 0.78708303761533,
+    "f1": 0.6437054631828979,
+    "fn": 103.0,
+    "fp": 197.0,
+    "pr_auc": 0.6629071289566899,
+    "precision": 0.5790598290598291,
+    "recall": 0.7245989304812834,
+    "roc_auc": 0.8467875687824539,
+    "tn": 838.0,
+    "tp": 271.0
+  },
+  "trusted_types": [
+    "churn.training.features.FeatureEngineer",
+    "numpy.dtype",
+    "xgboost.core.Booster",
+    "xgboost.sklearn.XGBClassifier"
+  ]
+}

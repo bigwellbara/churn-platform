@@ -73,6 +73,36 @@ def raw_df() -> pd.DataFrame:
     return make_synthetic_telco()
 
 
+@pytest.fixture(scope="session")
+def model_bundle_dir(tmp_path_factory):
+    """A real (tiny) model bundle, written exactly as churn-export would write one."""
+    from churn.bundle import write_bundle
+    from churn.config import RAW_FEATURES, TARGET
+    from churn.training.data import clean
+    from churn.training.models import build_pipeline, build_xgboost
+
+    df = clean(make_synthetic_telco(n=500, seed=3))
+    X, y = df.drop(columns=[TARGET]), df[TARGET]
+    pipeline = build_pipeline(build_xgboost(pos_weight=2.0, n_estimators=30)).fit(X, y)
+    meta = {
+        "model_name": "churn-model",
+        "model_version": "7",
+        "model_type": "xgboost_test",
+        "decision_threshold": 0.5,
+        "exported_at": "2026-01-01T00:00:00+00:00",
+        "features": RAW_FEATURES,
+        "test_metrics": {"roc_auc": 0.8, "pr_auc": 0.6},
+    }
+    return write_bundle(pipeline, meta, tmp_path_factory.mktemp("bundle"))
+
+
+@pytest.fixture
+def customer() -> dict:
+    from churn.api.schemas import EXAMPLE_CUSTOMER
+
+    return dict(EXAMPLE_CUSTOMER)
+
+
 @pytest.fixture
 def csv_path(tmp_path, raw_df):
     path = tmp_path / "telco.csv"

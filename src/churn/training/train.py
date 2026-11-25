@@ -17,13 +17,13 @@ from pathlib import Path
 import mlflow
 import mlflow.sklearn
 import numpy as np
-import skops.io as skops_io
 from mlflow.models import infer_signature
 from mlflow.tracking import MlflowClient
 from sklearn.base import clone
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
 
+from churn.bundle import trusted_types_for
 from churn.config import (
     CHAMPION_ALIAS,
     EXPERIMENT_NAME,
@@ -48,9 +48,6 @@ logger = logging.getLogger("churn.train")
 
 # A train ROC-AUC this much higher than validation ROC-AUC is flagged as overfitting.
 OVERFIT_GAP_WARNING = 0.05
-
-# Modules whose types we accept inside a saved model (see trusted_types_for).
-TRUSTED_MODULE_PREFIXES = ("churn.", "numpy.", "sklearn.", "xgboost.", "scipy.")
 
 
 @dataclass
@@ -148,21 +145,6 @@ def evaluate_candidate(
             gap,
         )
         return CandidateResult(name, run.info.run_id, pipeline, threshold, metrics)
-
-
-def trusted_types_for(pipeline: Pipeline) -> list[str]:
-    """Types skops must be told to trust so the saved pipeline can be loaded again.
-
-    MLflow saves sklearn models with skops instead of pickle, because unpickling a
-    tampered file can execute arbitrary code. skops refuses to load any type not on an
-    explicit allowlist. We only vouch for types from libraries we actually use. Anything
-    else is a red flag and stops registration.
-    """
-    untrusted = skops_io.get_untrusted_types(data=skops_io.dumps(pipeline))
-    unexpected = [t for t in untrusted if not t.startswith(TRUSTED_MODULE_PREFIXES)]
-    if unexpected:
-        raise RuntimeError(f"Refusing to trust unexpected types in model: {unexpected}")
-    return untrusted
 
 
 def register_champion(best: CandidateResult, splits: Splits) -> str:
