@@ -4,13 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import matplotlib
-
-matplotlib.use("Agg")  # headless backend: works in CI and Docker without a display
-
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-from sklearn.metrics import (  # noqa: E402
+import numpy as np
+from matplotlib.figure import Figure
+from sklearn.metrics import (
     ConfusionMatrixDisplay,
     accuracy_score,
     average_precision_score,
@@ -59,12 +55,14 @@ def compute_metrics(y_true, y_prob, threshold: float = 0.5) -> dict[str, float]:
 def save_confusion_matrix(y_true, y_prob, threshold: float, path: Path, title: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     y_pred = (np.asarray(y_prob) >= threshold).astype(int)
-    fig, ax = plt.subplots(figsize=(4.5, 4))
+    # A bare Figure (not pyplot) renders headlessly in CI/Docker without switching the
+    # global matplotlib backend, so importing this module never breaks notebook plots.
+    fig = Figure(figsize=(4.5, 4))
+    ax = fig.subplots()
     ConfusionMatrixDisplay.from_predictions(
         y_true, y_pred, labels=[0, 1], display_labels=["Stays", "Churns"], ax=ax, colorbar=False
     )
     ax.set_title(f"{title}\nthreshold={threshold:.2f}")
     fig.tight_layout()
     fig.savefig(path, dpi=120)
-    plt.close(fig)
     return path
