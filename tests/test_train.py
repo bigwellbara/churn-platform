@@ -8,8 +8,10 @@ import pytest
 from mlflow.tracking import MlflowClient
 
 import churn.training.train as train_module
+from churn.bundle import load_bundle
 from churn.config import CHAMPION_ALIAS, REGISTERED_MODEL_NAME
 from churn.training.data import clean
+from churn.training.export import export_model
 from churn.training.train import main, run_training
 
 
@@ -29,6 +31,7 @@ def test_full_training_registers_champion(csv_path, raw_df, tmp_path, mlflow_env
         tune_iterations=2,
         **mlflow_env,
     )
+    mlflow_uri = {"tracking_uri": mlflow_env["tracking_uri"]}
 
     cands = summary["candidates"]
     assert set(cands) >= {"dummy_baseline", "logistic_regression", "random_forest", "xgboost"}
@@ -53,6 +56,15 @@ def test_full_training_registers_champion(csv_path, raw_df, tmp_path, mlflow_env
     X = clean(raw_df.head(10)).drop(columns=["Churn"])
     probs = model.predict_proba(X)[:, 1]
     assert ((probs >= 0) & (probs <= 1)).all()
+
+    # Export the pinned version into a serving bundle and check it round-trips.
+    meta = export_model(tmp_path / "bundle", version=summary["registered_version"], **mlflow_uri)
+    assert meta["model_version"] == summary["registered_version"]
+    assert meta["exported_from"] == f"version {summary['registered_version']}"
+    assert set(meta["test_metrics"]) >= {"roc_auc", "pr_auc", "recall"}
+    pipeline, loaded = load_bundle(tmp_path / "bundle")
+    assert loaded["decision_threshold"] == pytest.approx(summary["decision_threshold"], abs=1e-5)
+    assert pipeline.predict_proba(X)[:, 1] == pytest.approx(probs)
 
 
 def test_cli_no_register(csv_path, tmp_path, mlflow_env, monkeypatch, capsys):
