@@ -25,10 +25,13 @@ from churn.bundle import write_bundle
 from churn.config import (
     CHAMPION_ALIAS,
     PROJECT_ROOT,
+    RAW_DATA_PATH,
     RAW_FEATURES,
     REGISTERED_MODEL_NAME,
     default_tracking_uri,
 )
+from churn.monitoring.drift import build_reference
+from churn.training.data import clean, load_raw, split_data
 
 logger = logging.getLogger("churn.export")
 DEFAULT_OUT = PROJECT_ROOT / "models" / "champion"
@@ -39,6 +42,7 @@ def export_model(
     version: str | None = None,
     alias: str = CHAMPION_ALIAS,
     tracking_uri: str | None = None,
+    data_path: Path = RAW_DATA_PATH,
 ) -> dict:
     mlflow.set_tracking_uri(tracking_uri or default_tracking_uri())
     client = MlflowClient()
@@ -65,21 +69,31 @@ def export_model(
             if k.startswith("test_")
         },
     }
-    write_bundle(pipeline, meta, Path(out_dir))
+    write_bundle(pipeline, meta, Path(out_dir), reference=_reference_profile(pipeline, data_path))
     logger.info("Exported %s v%s to %s", REGISTERED_MODEL_NAME, mv.version, out_dir)
     return meta
+
+
+def _reference_profile(pipeline, data_path: Path) -> dict:
+    """Drift baseline: feature distributions of the training split, and the model's score
+    distribution on the validation split (unbiased, unlike scores on its own training data).
+    The split is deterministic, so this reproduces exactly the data the model learned from."""
+    splits = split_data(clean(load_raw(data_path)))
+    scores = pipeline.predict_proba(splits.X_val)[:, 1]
+    return build_reference(splits.X_train, scores)
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Export a registered model for serving.")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--data", type=Path, default=RAW_DATA_PATH, help="Training CSV")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--version", help="Exact registry version to export")
     group.add_argument("--alias", default=CHAMPION_ALIAS, help="Registry alias to export")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    meta = export_model(args.out, version=args.version, alias=args.alias)
+    meta = export_model(args.out, version=args.version, alias=args.alias, data_path=args.data)
     print(json.dumps({k: meta[k] for k in ("model_version", "model_type")}, indent=2))
 
 
