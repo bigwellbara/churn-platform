@@ -7,7 +7,8 @@ customers are likely to cancel (churn). It covers the full path from notebook to
 deployed service: training pipeline, experiment tracking, a model registry, a FastAPI service,
 Docker, monitoring with drift detection, CI/CD, cloud deployment and a Next.js dashboard.
 
-> Status: **Week 1 complete** (data, model, experiment tracking). See the [roadmap](#roadmap).
+> Status: **Week 2 complete**: model, prediction API, Postgres logging, Docker. See the
+> [roadmap](#roadmap).
 
 ## Problem
 
@@ -27,7 +28,9 @@ Dataset: [Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-
           │  pipeline  │  register best  │  tracking +  │
           └────────────┘ ──────────────▶ │   registry   │
                                          └──────┬───────┘
-                                     load @champion
+                          churn-export (pinned version → models/champion/)
+                                                ▼
+                                    Docker image = code + model bundle
                                                 ▼
  Next.js dashboard ──HTTP──▶  FastAPI service ──▶ Postgres (prediction log)
                                      │  /metrics
@@ -46,7 +49,40 @@ uv run churn-train            # train, compare, register the best model
 uv run churn-train --tune     # plus a time-boxed XGBoost hyperparameter search
 uv run mlflow ui --backend-store-uri sqlite:///mlflow.db   # browse experiments at :5000
 uv run pytest                 # tests (use synthetic data, no download needed)
+uv run churn-export           # copy the @champion model into models/champion/ for serving
 ```
+
+### Run the API
+
+With Docker (API + Postgres, one command):
+
+```bash
+docker compose up -d --build
+# open http://localhost:8000/docs for interactive API docs
+```
+
+Without Docker: `uv run uvicorn churn.api.main:create_app --factory --reload`
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /predict` | Score one customer |
+| `POST /predict/batch` | Score up to 1,000 customers in one call |
+| `GET /model` | Serving model version, threshold, test metrics |
+| `GET /health` | Liveness, model version, database status |
+| `GET /metrics` | Prometheus metrics |
+
+```bash
+curl -s localhost:8000/predict -H 'Content-Type: application/json' -d '{
+  "gender": "Female", "SeniorCitizen": 0, "Partner": "Yes", "Dependents": "No",
+  "tenure": 1, "PhoneService": "No", "MultipleLines": "No phone service",
+  "InternetService": "DSL", "OnlineSecurity": "No", "OnlineBackup": "Yes",
+  "DeviceProtection": "No", "TechSupport": "No", "StreamingTV": "No",
+  "StreamingMovies": "No", "Contract": "Month-to-month", "PaperlessBilling": "Yes",
+  "PaymentMethod": "Electronic check", "MonthlyCharges": 29.85, "TotalCharges": 29.85}'
+```
+
+Configuration is by environment variable: `MODEL_DIR`, `DATABASE_URL`, `API_KEY`
+(require an `X-API-Key` header), `LOG_LEVEL`, `MAX_BATCH_SIZE`.
 
 ## Results
 
@@ -76,9 +112,11 @@ Full explanation: **[docs/TRAINING.md](docs/TRAINING.md)**.
 ```
 src/churn/
   config.py          column names, paths, settings (single source of truth)
-  training/          data cleaning, features, models, evaluation, train CLI
-  api/               FastAPI service                          (week 2)
+  bundle.py          model bundle format shared by training and serving
+  training/          data cleaning, features, models, evaluation, train + export CLIs
+  api/               FastAPI app, schemas, model service, Postgres log, metrics, JSON logs
   monitoring/        drift detection                          (week 3)
+models/champion/     exported model bundle served by the API (model.skops + metadata)
 tests/               pytest suite (synthetic data)
 notebooks/           01_eda.ipynb: data exploration, model insights, fairness check
 docs/                TRAINING.md (how training works), MODEL_CARD.md
@@ -89,7 +127,7 @@ reports/             metrics.json from the latest training run
 
 - [x] Week 1: project setup, training pipeline, MLflow tracking and registry, tests, CI
 - [x] Week 1: EDA notebook on the real dataset, first real training run, model card
-- [ ] Week 2: FastAPI service, Postgres logging, Docker and docker-compose
+- [x] Week 2: FastAPI service, Postgres logging, Docker and docker-compose
 - [ ] Week 3: Prometheus, Grafana, drift detection, load testing
 - [ ] Week 4: CD pipeline and cloud deployment
 - [ ] Week 5: Next.js dashboard, docs, demo video
