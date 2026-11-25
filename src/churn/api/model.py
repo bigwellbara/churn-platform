@@ -22,8 +22,23 @@ def risk_level(probability: float, threshold: float) -> str:
     return "low"
 
 
+def limit_threads(pipeline: Pipeline, threads: int) -> None:
+    """Set n_jobs on every pipeline step that has it.
+
+    Training used n_jobs=-1 (all cores), which is right for fitting thousands of rows but
+    wrong for serving: each single-row prediction would wake every core's thread, and
+    under concurrent load those threads fight over CPUs. Measured on 16 cores, n_jobs=1
+    cut per-prediction time from ~32 ms to ~11 ms (see docs/LOAD_TEST.md).
+    """
+    for _, step in pipeline.steps:
+        if "n_jobs" in step.get_params(deep=False):
+            step.set_params(n_jobs=threads)
+
+
 class ModelService:
-    def __init__(self, pipeline: Pipeline, meta: dict[str, Any]):
+    def __init__(self, pipeline: Pipeline, meta: dict[str, Any], threads: int | None = 1):
+        if threads is not None:
+            limit_threads(pipeline, threads)
         self.pipeline = pipeline
         self.meta = meta
         self.version = str(meta["model_version"])
@@ -31,15 +46,21 @@ class ModelService:
         self.model_type = meta.get("model_type", "unknown")
 
     @classmethod
-    def from_dir(cls, model_dir: Path) -> ModelService:
+    def from_dir(cls, model_dir: Path, threads: int | None = 1) -> ModelService:
         pipeline, meta = load_bundle(model_dir)
-        return cls(pipeline, meta)
+        return cls(pipeline, meta, threads=threads)
 
-    def predict(self, customers: list[CustomerFeatures]) -> list[Prediction]:
+    def score(self, features: list[dict[str, Any]]) -> list[float]:
+        """Raw model inputs in, churn probabilities out. Picklable in and out, so it can
+        run in a separate worker process (see churn.api.inference)."""
         # One DataFrame, one predict_proba call for the whole batch: vectorised scoring
         # is far faster than looping over rows. Column order matches training.
-        frame = pd.DataFrame([c.features() for c in customers], columns=RAW_FEATURES)
-        probabilities = self.pipeline.predict_proba(frame)[:, 1]
+        frame = pd.DataFrame(features, columns=RAW_FEATURES)
+        return self.pipeline.predict_proba(frame)[:, 1].tolist()
+
+    def to_predictions(
+        self, customers: list[CustomerFeatures], probabilities: list[float]
+    ) -> list[Prediction]:
         return [
             Prediction(
                 customer_id=customer.customer_id,
@@ -49,3 +70,7 @@ class ModelService:
             )
             for customer, p in zip(customers, probabilities, strict=True)
         ]
+
+    def predict(self, customers: list[CustomerFeatures]) -> list[Prediction]:
+        """In-process convenience: score and apply the threshold."""
+        return self.to_predictions(customers, self.score([c.features() for c in customers]))

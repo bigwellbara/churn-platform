@@ -7,25 +7,31 @@ Then open http://127.0.0.1:8000/docs
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Security
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import APIKeyHeader
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from churn import __version__
 from churn.api import metrics
+from churn.api.batching import MicroBatcher
 from churn.api.db import PredictionStore
+from churn.api.inference import ProcessInference
 from churn.api.log_config import configure_logging
+from churn.api.log_writer import PredictionLogWriter
 from churn.api.model import ModelService
 from churn.api.schemas import (
+    EXAMPLE_CUSTOMER,
     BatchRequest,
     BatchResponse,
     CustomerFeatures,
@@ -67,12 +73,27 @@ def _connect_store(settings: Settings) -> PredictionStore | None:
         return None
 
 
-def _save_rows(store: PredictionStore, rows: list[dict]) -> None:
-    try:
-        store.save(rows)
-    except Exception:
-        metrics.DB_ERRORS.inc()
-        logger.exception("Failed to log predictions", extra={"fields": {"rows": len(rows)}})
+async def _watch_event_loop(interval: float = 0.1) -> None:
+    """Measure event-loop lag: how late a short sleep wakes up. Anything blocking the loop
+    (CPU work or a sync call in async code) delays every request, and shows up here."""
+    loop = asyncio.get_running_loop()
+    while True:
+        start = loop.time()
+        await asyncio.sleep(interval)
+        metrics.EVENT_LOOP_LAG.observe(max(0.0, loop.time() - start - interval))
+
+
+async def predict_customers(app: FastAPI, customers: list[CustomerFeatures]) -> list[Prediction]:
+    """Score customers in the model worker process if configured, else in a thread."""
+    model: ModelService = app.state.model
+    features = [c.features() for c in customers]
+    start = time.perf_counter()
+    if app.state.inference is not None:
+        probabilities = await app.state.inference.score(features)
+    else:
+        probabilities = await run_in_threadpool(model.score, features)
+    metrics.MODEL_LATENCY.observe(time.perf_counter() - start)
+    return model.to_predictions(customers, probabilities)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -83,9 +104,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         # Fail fast: without a model the service is useless. A crash at startup makes the
         # platform keep routing traffic to the previous healthy version instead.
-        model = ModelService.from_dir(settings.model_dir)
+        model = ModelService.from_dir(settings.model_dir, threads=settings.model_threads)
         app.state.model = model
+        app.state.inference = None
+        if settings.inference_processes > 0:
+            app.state.inference = ProcessInference(
+                settings.model_dir, settings.model_threads, settings.inference_processes
+            )
+            app.state.inference.warm_up([CustomerFeatures(**EXAMPLE_CUSTOMER).features()])
         app.state.store = _connect_store(settings)
+        app.state.log_writer = (
+            PredictionLogWriter(app.state.store, flush_interval=settings.log_flush_interval)
+            if app.state.store is not None
+            else None
+        )
+        if app.state.log_writer is not None:
+            app.state.log_writer.start()
+        app.state.batcher = (
+            MicroBatcher(
+                lambda batch: predict_customers(app, batch),
+                settings.max_micro_batch,
+                max_in_flight=max(1, settings.inference_processes),
+            )
+            if settings.micro_batching
+            else None
+        )
+        if app.state.batcher is not None:
+            app.state.batcher.start()
         metrics.MODEL_INFO.clear()
         metrics.MODEL_INFO.labels(model.version, model.model_type).set(1)
         logger.info(
@@ -96,10 +141,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "model_type": model.model_type,
                     "threshold": model.threshold,
                     "prediction_logging": app.state.store is not None,
+                    "micro_batching": settings.micro_batching,
+                    "inference_processes": settings.inference_processes,
                 }
             },
         )
+        lag_watcher = asyncio.create_task(_watch_event_loop(), name="event-loop-lag")
         yield
+        lag_watcher.cancel()
+        if app.state.batcher is not None:
+            await app.state.batcher.stop()
+        if app.state.inference is not None:
+            app.state.inference.shutdown()
+        if app.state.log_writer is not None:
+            app.state.log_writer.stop()  # flushes rows still in the buffer
         if app.state.store is not None:
             app.state.store.dispose()
 
@@ -183,17 +238,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ---------------------------------------------------------------- helpers
     def record(
-        request: Request,
-        background: BackgroundTasks,
-        customers: list[CustomerFeatures],
-        predictions: list[Prediction],
+        request: Request, customers: list[CustomerFeatures], predictions: list[Prediction]
     ) -> None:
         model: ModelService = request.app.state.model
         for p in predictions:
             metrics.PREDICTIONS.labels("churn" if p.churn_prediction else "stay").inc()
             metrics.PROBABILITY.observe(p.churn_probability)
-        store: PredictionStore | None = request.app.state.store
-        if store is None:
+        writer: PredictionLogWriter | None = request.app.state.log_writer
+        if writer is None:
             return
         rows = [
             {
@@ -207,8 +259,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             }
             for c, p in zip(customers, predictions, strict=True)
         ]
-        # Runs after the response is sent, so logging adds no user-facing latency.
-        background.add_task(_save_rows, store, rows)
+        # Enqueue only; the writer thread inserts in bulk (see churn.api.log_writer).
+        writer.submit(rows)
 
     # ---------------------------------------------------------------- routes
     @app.get("/", include_in_schema=False)
@@ -247,10 +299,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tags=["predictions"],
         dependencies=[Depends(require_api_key)],
     )
-    def predict(customer: CustomerFeatures, request: Request, background: BackgroundTasks):
+    async def predict(customer: CustomerFeatures, request: Request):
         model: ModelService = request.app.state.model
-        [prediction] = model.predict([customer])
-        record(request, background, [customer], [prediction])
+        batcher: MicroBatcher | None = request.app.state.batcher
+        if batcher is not None:
+            prediction = await batcher.predict(customer)
+        else:
+            [prediction] = await predict_customers(request.app, [customer])
+        record(request, [customer], [prediction])
         return PredictionResponse(
             **prediction.model_dump(), model_version=model.version, threshold=model.threshold
         )
@@ -261,7 +317,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tags=["predictions"],
         dependencies=[Depends(require_api_key)],
     )
-    def predict_batch(body: BatchRequest, request: Request, background: BackgroundTasks):
+    async def predict_batch(body: BatchRequest, request: Request):
         count = len(body.customers)
         if count > settings.max_batch_size:
             raise HTTPException(
@@ -269,9 +325,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 detail=f"Batch of {count} customers exceeds the limit of {settings.max_batch_size}",
             )
         model: ModelService = request.app.state.model
-        predictions = model.predict(body.customers)
+        predictions = await predict_customers(request.app, body.customers)
         metrics.BATCH_SIZE.observe(count)
-        record(request, background, body.customers, predictions)
+        record(request, body.customers, predictions)
         return BatchResponse(
             model_version=model.version,
             threshold=model.threshold,

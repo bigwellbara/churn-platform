@@ -23,8 +23,9 @@ mlflow.db
 mlartifacts/
 mlruns/
 
-# Generated report figures (metrics.json is kept as evidence)
+# Generated report figures and raw load-test CSVs (summaries live in docs/)
 reports/figures/
+reports/loadtest/
 
 # Secrets / env
 .env
