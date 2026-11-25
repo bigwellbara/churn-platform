@@ -7,7 +7,7 @@ customers are likely to cancel (churn). It covers the full path from notebook to
 deployed service: training pipeline, experiment tracking, a model registry, a FastAPI service,
 Docker, monitoring with drift detection, CI/CD, cloud deployment and a Next.js dashboard.
 
-> Status: **Week 1, data and model**, in progress. See the [roadmap](#roadmap).
+> Status: **Week 1 complete** (data, model, experiment tracking). See the [roadmap](#roadmap).
 
 ## Problem
 
@@ -48,6 +48,19 @@ uv run mlflow ui --backend-store-uri sqlite:///mlflow.db   # browse experiments 
 uv run pytest                 # tests (use synthetic data, no download needed)
 ```
 
+## Results
+
+Tuned XGBoost, held-out test set (1,409 customers), decision threshold 0.606:
+
+| ROC-AUC | PR-AUC | Recall | Precision | F1 |
+|---|---|---|---|---|
+| **0.847** | **0.663** (random: 0.265) | **72.5%** | 57.9% | 0.644 |
+
+The model catches 271 of 374 churners. The biggest drivers are short tenure,
+month-to-month contracts and fibre internet. Full analysis is in the
+[EDA notebook](notebooks/01_eda.ipynb), and limitations and the fairness check are in the
+[model card](docs/MODEL_CARD.md).
+
 ## Training in one paragraph
 
 Four models are compared: a no-skill **dummy baseline**, **logistic regression**,
@@ -67,14 +80,15 @@ src/churn/
   api/               FastAPI service                          (week 2)
   monitoring/        drift detection                          (week 3)
 tests/               pytest suite (synthetic data)
-docs/                training guide, model card, reports
+notebooks/           01_eda.ipynb: data exploration, model insights, fairness check
+docs/                TRAINING.md (how training works), MODEL_CARD.md
 reports/             metrics.json from the latest training run
 ```
 
 ## Roadmap
 
 - [x] Week 1: project setup, training pipeline, MLflow tracking and registry, tests, CI
-- [ ] Week 1: EDA notebook on the real dataset, first real training run, model card
+- [x] Week 1: EDA notebook on the real dataset, first real training run, model card
 - [ ] Week 2: FastAPI service, Postgres logging, Docker and docker-compose
 - [ ] Week 3: Prometheus, Grafana, drift detection, load testing
 - [ ] Week 4: CD pipeline and cloud deployment

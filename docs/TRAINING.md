@@ -130,9 +130,11 @@ For each model, `train.py` does:
 
 ### Why tune the threshold?
 
-A model outputs probabilities; 0.5 is an arbitrary cut-off. With 26% churners, the best
-cut-off is usually lower (often 0.3 to 0.4), which catches many more churners for a modest
-rise in false alarms. The threshold is chosen on **validation**, then stored with the
+A model outputs probabilities; 0.5 is an arbitrary cut-off. An *unweighted* model on 26%
+churners usually needs a lower cut-off (often 0.3 to 0.4) to catch enough churners. Our
+models use class weighting, which pushes all scores *upward*, so the best cut-off came out
+*higher* (0.606). Tuning the threshold corrects for whatever the model does, which is why
+we tune it instead of assuming 0.5. The threshold is chosen on **validation**, then stored with the
 registered model (`decision_threshold` tag) so the API uses exactly the same value.
 
 In a real business you would pick it from costs: if a missed churner costs R2,000 and a
@@ -164,10 +166,29 @@ uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
 Storage: a local SQLite file (`mlflow.db`) for run metadata and the registry, and
 `mlartifacts/` for files. In the cloud phase this becomes Postgres plus object storage.
 
-## 9. What to expect on the real data
+## 9. Results on the real data (run of 2026-11-25)
 
-Typical results on the Telco dataset (to be replaced with our measured numbers):
-ROC-AUC ≈ 0.83 to 0.85 for logistic regression and XGBoost, PR-AUC ≈ 0.63 to 0.67,
-recall ≈ 0.75 to 0.80 at the tuned threshold. Logistic regression is often within 0.01 of
-XGBoost. That is a real finding worth reporting: the simpler, more explainable model may be
-the better production choice.
+| Model | CV ROC-AUC | Val ROC-AUC | Val PR-AUC | Val F1 | Train-val gap |
+|---|---|---|---|---|---|
+| Dummy baseline | 0.500 ± 0.000 | 0.500 | 0.265 | 0.420 | 0.000 |
+| Logistic regression | 0.848 ± 0.012 | 0.836 | 0.643 | 0.630 | 0.017 |
+| Random forest | 0.847 ± 0.011 | 0.837 | 0.640 | 0.636 | 0.089 ⚠ |
+| XGBoost (defaults) | 0.838 ± 0.010 | 0.829 | 0.634 | 0.617 | 0.114 ⚠ |
+| **XGBoost (tuned)** | **0.849 ± 0.012** | **0.839** | **0.648** | **0.644** | 0.036 |
+
+Winner on the test set (threshold 0.606): ROC-AUC **0.847**, PR-AUC **0.663**,
+recall **0.725**, precision **0.579**, F1 **0.644**.
+
+What to take from it:
+
+- **Every real model gives about 2.4× lift** over the dummy's PR-AUC (0.265 = churn rate).
+- **Default XGBoost overfits** (gap 0.114). Tuning chose shallower trees, a lower learning
+  rate and a larger `min_child_weight`, which cut the gap to 0.036 *and* improved
+  validation scores. That is regularisation working as intended.
+- **The top three models are within one CV standard deviation** (±0.012). Logistic
+  regression is statistically tied with tuned XGBoost while being simpler and directly
+  interpretable. That is a legitimate argument for serving it instead.
+- **Permutation importance** (see `notebooks/01_eda.ipynb`): tenure, Contract and
+  InternetService carry most of the signal.
+
+See [MODEL_CARD.md](MODEL_CARD.md) for limitations and the fairness evaluation.
