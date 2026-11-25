@@ -7,8 +7,8 @@ customers are likely to cancel (churn). It covers the full path from notebook to
 deployed service: training pipeline, experiment tracking, a model registry, a FastAPI service,
 Docker, monitoring with drift detection, CI/CD, cloud deployment and a Next.js dashboard.
 
-> Status: **Week 2 complete**: model, prediction API, Postgres logging, Docker. See the
-> [roadmap](#roadmap).
+> Status: **Week 3 complete**: model, prediction API, Docker, monitoring, drift detection
+> and load testing. See the [roadmap](#roadmap).
 
 ## Problem
 
@@ -82,7 +82,23 @@ curl -s localhost:8000/predict -H 'Content-Type: application/json' -d '{
 ```
 
 Configuration is by environment variable: `MODEL_DIR`, `DATABASE_URL`, `API_KEY`
-(require an `X-API-Key` header), `LOG_LEVEL`, `MAX_BATCH_SIZE`.
+(require an `X-API-Key` header), `LOG_LEVEL`, `MAX_BATCH_SIZE`, `INFERENCE_PROCESSES`,
+`MICRO_BATCHING`, `LOG_FLUSH_INTERVAL`.
+
+### Monitoring
+
+`docker compose up -d` also starts the drift monitor, Prometheus (http://localhost:9090,
+alerts at `/alerts`) and Grafana (http://localhost:3000, dashboard provisioned from
+`infra/grafana/`). Try the drift demo:
+
+```bash
+uv run churn-simulate --mode normal  --n 600   # real held-out customers: all PSI < 0.10
+uv run churn-simulate --mode shifted --n 600   # price rise + marketing push: alert fires
+docker compose exec drift churn-drift --once   # PSI per feature
+```
+
+Details: [docs/MONITORING.md](docs/MONITORING.md). Performance work:
+[docs/LOAD_TEST.md](docs/LOAD_TEST.md).
 
 ## Results
 
@@ -96,6 +112,16 @@ The model catches 271 of 374 churners. The biggest drivers are short tenure,
 month-to-month contracts and fibre internet. Full analysis is in the
 [EDA notebook](notebooks/01_eda.ipynb), and limitations and the fairness check are in the
 [model card](docs/MODEL_CARD.md).
+
+**Serving performance** (50 req/s, 0 errors): profiling-driven optimisation cut `/predict`
+latency from p50 1,400 ms / p95 1,700 ms to **p50 130 ms / p95 280 ms** via dynamic
+micro-batching, a write-behind prediction log, and running the model in worker processes
+to avoid GIL contention. Every step was measured, and the rejected hypotheses are listed
+too: [docs/LOAD_TEST.md](docs/LOAD_TEST.md).
+
+**Drift detection:** a simulated price rise and marketing push was flagged within a minute
+(max PSI 1.23 on the changed features, every untouched feature stable):
+[docs/MONITORING.md](docs/MONITORING.md).
 
 ## Training in one paragraph
 
@@ -114,12 +140,15 @@ src/churn/
   config.py          column names, paths, settings (single source of truth)
   bundle.py          model bundle format shared by training and serving
   training/          data cleaning, features, models, evaluation, train + export CLIs
-  api/               FastAPI app, schemas, model service, Postgres log, metrics, JSON logs
-  monitoring/        drift detection                          (week 3)
-models/champion/     exported model bundle served by the API (model.skops + metadata)
+  api/               FastAPI app, schemas, micro-batching, worker-process inference,
+                     write-behind Postgres log, Prometheus metrics, JSON logs
+  monitoring/        PSI drift detection, drift monitor service, traffic simulator
+models/champion/     exported bundle: model.skops, metadata, drift reference profile
+infra/               Prometheus config + alert rules, Grafana provisioning + dashboard
+loadtest/            Locust load test, benchmarks, sampling profiler
 tests/               pytest suite (synthetic data)
 notebooks/           01_eda.ipynb: data exploration, model insights, fairness check
-docs/                TRAINING.md (how training works), MODEL_CARD.md
+docs/                TRAINING, MODEL_CARD, MONITORING, LOAD_TEST
 reports/             metrics.json from the latest training run
 ```
 
@@ -128,6 +157,7 @@ reports/             metrics.json from the latest training run
 - [x] Week 1: project setup, training pipeline, MLflow tracking and registry, tests, CI
 - [x] Week 1: EDA notebook on the real dataset, first real training run, model card
 - [x] Week 2: FastAPI service, Postgres logging, Docker and docker-compose
-- [ ] Week 3: Prometheus, Grafana, drift detection, load testing
+- [x] Week 3: Prometheus, Grafana, drift detection, load testing
+- [ ] Grafana dashboard screenshots (image download blocked by network issues on build day)
 - [ ] Week 4: CD pipeline and cloud deployment
 - [ ] Week 5: Next.js dashboard, docs, demo video
