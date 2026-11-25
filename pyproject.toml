@@ -24,6 +24,12 @@ dev = [
     "ruff>=0.6",
     "black>=24.0",
 ]
+# Notebook tooling, kept out of CI: `uv sync --group eda`
+eda = [
+    "ipykernel>=6.29",
+    "nbclient>=0.10",
+    "nbformat>=5.10",
+]
 
 [build-system]
 requires = ["hatchling"]
