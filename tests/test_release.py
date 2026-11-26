@@ -125,8 +125,9 @@ def test_smoke_checks_pass_against_a_live_api(live_api):
 
 
 def test_smoke_detects_the_wrong_commit(live_api):
-    with pytest.raises(smoke.SmokeTestError, match="expected 'def5678'"):
-        smoke.run_checks(live_api, expect_sha="def5678", startup_timeout=10)
+    # Keeps polling (a new version may still be starting), then gives up.
+    with pytest.raises(smoke.SmokeTestError, match="serving commit 'abc1234', expected 'def5678'"):
+        smoke.run_checks(live_api, expect_sha="def5678", startup_timeout=1)
 
 
 def test_smoke_cli(live_api, capsys):
@@ -137,4 +138,40 @@ def test_smoke_cli(live_api, capsys):
 def test_smoke_reports_an_api_that_never_comes_up(capsys):
     url = f"http://127.0.0.1:{_free_port()}"  # nothing listening
     assert smoke.main([url, "--startup-timeout", "1"]) == 1
-    assert "not healthy after 1s" in capsys.readouterr().out
+    assert "not ready after 1s" in capsys.readouterr().out
+
+
+def test_smoke_waits_for_the_new_version_to_go_live():
+    """Render keeps serving the old version while the new one boots: the smoke test must
+    wait for the new commit rather than fail on (or, worse, pass against) the old one."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    calls = {"root": 0}
+
+    class Host(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/":
+                calls["root"] += 1
+                sha = "old1234" if calls["root"] <= 2 else "new5678"
+                body = {"git_sha": sha}
+            else:
+                body = {"status": "ok", "model_version": "1"}
+            payload = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Host)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}"
+        health = smoke.wait_until_up(url, timeout=10, interval=0.05, expect_sha="new5678")
+        assert health["status"] == "ok"
+        assert calls["root"] == 3  # polled through two "old" answers
+    finally:
+        server.shutdown()

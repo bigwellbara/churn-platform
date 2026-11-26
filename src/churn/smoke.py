@@ -82,20 +82,31 @@ def _check(condition: bool, message: str) -> None:
         raise SmokeTestError(message)
 
 
-def wait_until_up(base_url: str, timeout: float = 120, interval: float = 2) -> dict:
-    """Poll /health until it answers 200. Absorbs container start-up and cold starts."""
+def wait_until_up(
+    base_url: str, timeout: float = 120, interval: float = 3, expect_sha: str | None = None
+) -> dict:
+    """Poll until /health answers 200 and, if `expect_sha` is given, until GET / reports
+    that commit. Absorbs start-up, cold starts, and hosts that keep serving the previous
+    version while the new one boots (Render does this)."""
     deadline = time.monotonic() + timeout
     last_error = "no response"
     while time.monotonic() < deadline:
         try:
-            status, body = _request(base_url, "/health", timeout=10)
-            if status == 200:
+            status, body = _request(base_url, "/health", timeout=30)
+            if status != 200:
+                last_error = f"HTTP {status}: {body}"
+            elif not expect_sha:
                 return body
-            last_error = f"HTTP {status}: {body}"
+            else:
+                _, root = _request(base_url, "/", timeout=30)
+                serving = root.get("git_sha") if isinstance(root, dict) else None
+                if serving == expect_sha:
+                    return body
+                last_error = f"serving commit {serving!r}, expected {expect_sha!r}"
         except (urllib.error.URLError, ConnectionError, TimeoutError, OSError) as err:
             last_error = repr(err)
         time.sleep(interval)
-    raise SmokeTestError(f"{base_url} not healthy after {timeout:.0f}s ({last_error})")
+    raise SmokeTestError(f"{base_url} not ready after {timeout:.0f}s ({last_error})")
 
 
 def run_checks(
@@ -107,7 +118,7 @@ def run_checks(
     """Run every check; raise SmokeTestError on the first failure. Returns a log."""
     log: list[str] = []
 
-    health = wait_until_up(base_url, timeout=startup_timeout)
+    health = wait_until_up(base_url, timeout=startup_timeout, expect_sha=expect_sha)
     _check(health.get("status") == "ok", f"/health status is {health.get('status')!r}")
     version = health.get("model_version")
     _check(bool(version), "/health reports no model version")
