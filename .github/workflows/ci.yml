@@ -42,6 +42,37 @@ jobs:
       - name: Model quality gate
         run: uv run churn-gate
 
+  dashboard:
+    # The Next.js dashboard: lint, type-check, unit tests (including a check that its model
+    # report matches reports/metrics.json), and a production build.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies (from lockfile)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
   docker:
     # Build the exact production image and prove it serves correct predictions with its
     # default settings, inside the smallest memory limit it is deployed to (Render free:

@@ -192,8 +192,10 @@ src/churn/
 models/champion/     exported bundle: model.skops, metadata, drift reference profile
 infra/               Prometheus config + alert rules, Grafana provisioning + dashboard,
                      gcp/bootstrap.sh (one-time cloud setup)
-.github/workflows/   ci.yml (tests, model gate, image smoke test), deploy.yml (GHCR, Render,
+.github/workflows/   ci.yml (tests, model gate, dashboard, image smoke test), deploy.yml (GHCR, Render,
                      Cloud Run), uptime.yml (scheduled production smoke test)
+dashboard/           Next.js dashboard: score a customer with retention what-ifs, rank a
+                     CSV, model report (see dashboard/README.md)
 loadtest/            Locust load test, benchmarks, sampling profiler
 tests/               pytest suite (synthetic data)
 notebooks/           01_eda.ipynb: data exploration, model insights, fairness check
@@ -211,4 +213,5 @@ reports/             metrics.json from the latest training run
 - [x] Week 4: model quality gate, image smoke tests, CD to Render with auto-rollback,
       Cloud Run pipeline (keyless), uptime checks
 - [ ] Cloud prediction log + drift monitor (managed Postgres; see DEPLOYMENT.md)
-- [ ] Week 5: Next.js dashboard, docs, demo video
+- [x] Week 5: Next.js dashboard (score, batch, model pages) with CI
+- [ ] Week 5: dashboard on Vercel, per-customer explanations, final docs, demo video

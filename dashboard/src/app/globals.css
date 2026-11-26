@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. Components use roles (surface, ink, accent, risk) rather than raw
+ * colours, so light and dark mode swap here in one place. Dark mode is chosen per role,
+ * not an automatic inversion. Chart and status colours follow a colour-blind-checked
+ * palette; status colours always come with a text label, never colour alone.
+ */
+:root {
+  color-scheme: light;
+  --page: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #f1f1ef;
+  --ink: #191919;
+  --ink-2: #5f5f5f;
+  --line: rgba(11, 11, 11, 0.1);
+  --grid: #e7e7e7;
+  --baseline: #c2c2c2;
+  --accent: #257de0;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3effc;
+  --track: #e9e9e6;
+  --muted-bar: #c9c9c5;
+  /* Risk / status: good, warning, critical. */
+  --risk-low: #0aac23;
+  --risk-medium: #fbb315;
+  --risk-high: #dc3c3d;
+  --risk-low-ink: #006c10;
+  --risk-medium-ink: #8a5a00;
+  --risk-high-ink: #b3261e;
+  /* Diverging pair for "risk goes down / up". */
+  --down: #257de0;
+  --up: #dc3c3d;
+  /* Sequential blue ramp for the confusion-matrix heatmap. */
+  --seq-1: #cce3fd;
+  --seq-2: #84b9f3;
+  --seq-3: #338ced;
+  --seq-4: #1b64be;
+  /* Text on each heatmap step, chosen for contrast. */
+  --seq-ink-1: #191919;
+  --seq-ink-2: #191919;
+  --seq-ink-3: #ffffff;
+  --seq-ink-4: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0b0b0b;
+    --surface: #191919;
+    --surface-2: #222222;
+    --ink: #efefef;
+    --ink-2: #a3a3a3;
+    --line: rgba(255, 255, 255, 0.1);
+    --grid: #303030;
+    --baseline: #474747;
+    --accent: #338ced;
+    --accent-ink: #ffffff;
+    --accent-soft: #14294a;
+    --track: #2c2c2c;
+    --muted-bar: #4a4a4a;
+    --risk-low: #0aac23;
+    --risk-medium: #fbb315;
+    --risk-high: #dc3c3d;
+    --risk-low-ink: #53c556;
+    --risk-medium-ink: #fbc54a;
+    --risk-high-ink: #f07a7a;
+    --down: #338ced;
+    --up: #eb6263;
+    --seq-1: #1a2f4d;
+    --seq-2: #1b4f8f;
+    --seq-3: #2370cd;
+    --seq-4: #519ced;
+    --seq-ink-1: #efefef;
+    --seq-ink-2: #ffffff;
+    --seq-ink-3: #ffffff;
+    --seq-ink-4: #0b0b0b;
+  }
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--line);
+  --color-grid: var(--grid);
+  --color-baseline: var(--baseline);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-track: var(--track);
+  --color-muted-bar: var(--muted-bar);
+  --color-risk-low: var(--risk-low);
+  --color-risk-medium: var(--risk-medium);
+  --color-risk-high: var(--risk-high);
+  --color-risk-low-ink: var(--risk-low-ink);
+  --color-risk-medium-ink: var(--risk-medium-ink);
+  --color-risk-high-ink: var(--risk-high-ink);
+  --color-down: var(--down);
+  --color-up: var(--up);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers in table columns line up; big standalone numbers keep proportional figures. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
