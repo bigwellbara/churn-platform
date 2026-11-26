@@ -1,0 +1,26 @@
+# Weekly dependency update PRs. Every PR runs the full CI (tests, model gate, Docker smoke
+# test) before it can be merged. Updates wait 14 days after release (cooldown), the same
+# supply-chain policy as `exclude-newer` in pyproject.toml: most malicious releases are
+# caught and pulled within days.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 14 }
+    groups:
+      actions: { patterns: ["*"] }
+
+  - package-ecosystem: uv
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 14 }
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly }
+    cooldown: { default-days: 14 }

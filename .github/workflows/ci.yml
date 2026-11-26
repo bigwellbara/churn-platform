@@ -1,5 +1,8 @@
 name: CI
 
+# Runs on every pull request and on main. A green run on main is what triggers the
+# deploy workflow (deploy.yml), so everything here is a precondition for production.
+
 on:
   push:
     branches: [main]
@@ -8,6 +11,9 @@ on:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   lint-and-test:
@@ -31,3 +37,41 @@ jobs:
 
       - name: Tests with coverage
         run: uv run pytest --cov-report=xml --cov-fail-under=80
+
+      # Unit tests check the code; the gate checks the model artefact that will ship.
+      - name: Model quality gate
+        run: uv run churn-gate
+
+  docker:
+    # Build the exact production image and prove it serves correct predictions, under the
+    # same CPU and memory limits as Cloud Run.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Build image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          load: true
+          tags: churn-api:ci
+          build-args: GIT_SHA=${{ github.sha }}
+          # Layer cache in GitHub's cache: unchanged dependency layers are not rebuilt.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start container (1 CPU, 1 GiB, like Cloud Run)
+        run: |
+          docker run -d --name api -p 8000:8000 --cpus 1 --memory 1g \
+            -e INFERENCE_PROCESSES=0 churn-api:ci
+
+      - name: Smoke test
+        run: python3 src/churn/smoke.py http://localhost:8000 --expect-sha "${{ github.sha }}"
+
+      - name: Image size and container logs
+        if: always()
+        run: |
+          docker image ls churn-api:ci
+          docker logs api 2>&1 | tail -n 50
