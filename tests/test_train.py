@@ -8,7 +8,7 @@ import pytest
 from mlflow.tracking import MlflowClient
 
 import churn.training.train as train_module
-from churn.bundle import load_bundle
+from churn.bundle import load_bundle, load_reference
 from churn.config import CHAMPION_ALIAS, REGISTERED_MODEL_NAME
 from churn.training.data import clean
 from churn.training.export import export_model
@@ -58,7 +58,15 @@ def test_full_training_registers_champion(csv_path, raw_df, tmp_path, mlflow_env
     assert ((probs >= 0) & (probs <= 1)).all()
 
     # Export the pinned version into a serving bundle and check it round-trips.
-    meta = export_model(tmp_path / "bundle", version=summary["registered_version"], **mlflow_uri)
+    meta = export_model(
+        tmp_path / "bundle",
+        version=summary["registered_version"],
+        data_path=csv_path,
+        **mlflow_uri,
+    )
+    reference = load_reference(tmp_path / "bundle")
+    assert set(reference["numeric"]) == {"tenure", "MonthlyCharges", "TotalCharges"}
+    assert reference["prediction"] is not None
     assert meta["model_version"] == summary["registered_version"]
     assert meta["exported_from"] == f"version {summary['registered_version']}"
     assert set(meta["test_metrics"]) >= {"roc_auc", "pr_auc", "recall"}

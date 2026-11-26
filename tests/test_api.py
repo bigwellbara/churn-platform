@@ -19,6 +19,7 @@ def make_client(model_bundle_dir, tmp_path):
         options = {
             "model_dir": model_bundle_dir,
             "database_url": f"sqlite:///{(tmp_path / 'predictions.db').as_posix()}",
+            "log_flush_interval": 60,  # tests flush explicitly, for determinism
             **overrides,
         }
         client = TestClient(create_app(Settings(**options)), raise_server_exceptions=False)
@@ -172,6 +173,8 @@ def test_predictions_are_logged_to_database(client, customer):
     client.post("/predict", json=customer, headers={"X-Request-ID": "req-1"})
     client.post("/predict/batch", json={"customers": [customer, customer]})
     store = client.app.state.store
+    assert store.count() == 0  # buffered: nothing written on the request path
+    assert client.app.state.log_writer.flush() == 3
     assert store.count() == 3
     with Session(store.engine) as s:
         row = s.scalars(select(PredictionLog).where(PredictionLog.request_id == "req-1")).one()
@@ -186,8 +189,31 @@ def test_database_failure_does_not_break_predictions(client, customer, monkeypat
 
     monkeypatch.setattr(client.app.state.store, "save", broken_save)
     before = REGISTRY.get_sample_value("churn_db_write_errors_total") or 0
+    dropped = REGISTRY.get_sample_value("churn_prediction_log_dropped_total") or 0
     assert client.post("/predict", json=customer).status_code == 200
+    client.app.state.log_writer.flush()
     assert REGISTRY.get_sample_value("churn_db_write_errors_total") == before + 1
+    assert REGISTRY.get_sample_value("churn_prediction_log_dropped_total") == dropped + 1
+
+
+def test_buffered_rows_are_flushed_on_shutdown(make_client, customer):
+    client = make_client()
+    store = client.app.state.store
+    client.post("/predict/batch", json={"customers": [customer] * 5})
+    client.__exit__(None, None, None)  # graceful shutdown
+    assert store.count() == 5
+
+
+def test_log_queue_is_bounded(make_client, customer):
+    from churn.api.log_writer import PredictionLogWriter
+
+    client = make_client()
+    tiny = PredictionLogWriter(client.app.state.store, max_queue=2)  # never started
+    client.app.state.log_writer = tiny
+    dropped = REGISTRY.get_sample_value("churn_prediction_log_dropped_total") or 0
+    client.post("/predict/batch", json={"customers": [customer] * 5})
+    assert REGISTRY.get_sample_value("churn_prediction_log_dropped_total") == dropped + 3
+    assert tiny.flush() == 2
 
 
 def test_metrics_endpoint(client, customer):
@@ -206,7 +232,7 @@ def test_unexpected_error_returns_json_500(client, customer, monkeypatch):
     def explode(customers):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(client.app.state.model, "predict", explode)
+    monkeypatch.setattr(client.app.state.model, "score", explode)
     r = client.post("/predict", json=customer, headers={"X-Request-ID": "req-500"})
     assert r.status_code == 500
     assert r.json() == {

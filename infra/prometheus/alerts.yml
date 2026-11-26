@@ -1,0 +1,54 @@
+# Alert rules, evaluated by Prometheus. View at http://localhost:9090/alerts
+# `for:` = the condition must hold this long before firing (filters out brief spikes).
+groups:
+  - name: churn-model
+    rules:
+      - alert: DataDriftDetected
+        expr: churn_drift_max_psi > 0.25
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Input data drift detected (max PSI {{ $value | printf \"%.2f\" }})"
+          description: >-
+            At least one input feature's PSI is above 0.25 versus the training data.
+            Check the drift panel to see which features moved; consider retraining.
+
+      - alert: PredictionLoggingFailing
+        expr: increase(churn_db_write_errors_total[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Predictions are not being written to Postgres"
+          description: "Drift checks and audits will have gaps until the database recovers."
+
+  - name: churn-api
+    rules:
+      - alert: HighLatencyP95
+        expr: >-
+          histogram_quantile(0.95,
+            sum by (le) (rate(churn_http_request_duration_seconds_bucket{path="/predict"}[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency of /predict is {{ $value | humanizeDuration }} (target < 100 ms)"
+
+      - alert: HighErrorRate
+        expr: >-
+          sum(rate(churn_http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(churn_http_requests_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 5% of requests are failing with server errors"
+
+      - alert: ServiceDown
+        expr: up{job=~"churn-api|churn-drift"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is not responding to Prometheus scrapes"

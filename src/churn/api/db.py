@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, String, create_engine, func, select, text
+from sqlalchemy import JSON, DateTime, String, create_engine, func, insert, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -45,8 +45,10 @@ class PredictionStore:
         Base.metadata.create_all(self.engine)
 
     def save(self, rows: list[dict[str, Any]]) -> None:
+        # One bulk INSERT (executemany) instead of building an ORM object per row:
+        # measured 8.4 ms -> see docs/LOAD_TEST.md for a 50-row batch.
         with Session(self.engine) as session, session.begin():
-            session.add_all([PredictionLog(**row) for row in rows])
+            session.execute(insert(PredictionLog), rows)
 
     def is_healthy(self) -> bool:
         try:

@@ -49,6 +49,13 @@ def test_bundle_round_trip(model_bundle_dir):
     assert 0 <= pred.churn_probability <= 1
 
 
+def test_model_service_limits_threads_for_serving(model_bundle_dir):
+    service = ModelService.from_dir(model_bundle_dir, threads=1)
+    assert service.pipeline.named_steps["model"].get_params()["n_jobs"] == 1
+    untouched = ModelService.from_dir(model_bundle_dir, threads=None)
+    assert untouched.pipeline.named_steps["model"].get_params()["n_jobs"] == -1
+
+
 def test_load_bundle_missing_dir_has_helpful_error(tmp_path):
     with pytest.raises(FileNotFoundError, match="churn-export"):
         load_bundle(tmp_path)

@@ -1,5 +1,8 @@
-# Local stack: `docker compose up -d --build`, then open http://localhost:8000/docs
-# Prometheus and Grafana are added in Week 3.
+# Local stack: `docker compose up -d --build`
+#   API docs    http://localhost:8000/docs
+#   Grafana     http://localhost:3000   (dashboard: "Churn platform"; admin login admin/admin)
+#   Prometheus  http://localhost:9090   (alerts: /alerts)
+# Load test:    see docs/LOAD_TEST.md (Locust runs from the host via `uv run --group load`)
 name: churn-platform
 
 services:
@@ -33,5 +36,56 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Same image as the API, different command: compares recent predictions with the
+  # training reference every 15 s and exposes PSI metrics on :8001 (internal only).
+  drift:
+    image: churn-api:local
+    command: ["churn-drift", "--serve", "--interval", "15", "--window", "500", "--port", "8001"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://churn:${POSTGRES_PASSWORD:-churn}@db:5432/churn
+      LOG_LEVEL: INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started   # api builds the shared image
+    healthcheck:
+      disable: true   # the image's HEALTHCHECK probes the API port, not ours
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./infra/prometheus:/etc/prometheus:ro
+      - promdata:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.6
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      # Read-only anonymous viewing, so the dashboard opens without a login locally.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/churn-overview.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  promdata:
+  grafanadata:

@@ -1,7 +1,8 @@
 """A model bundle: the hand-off format between training and serving.
 
-    <dir>/model.skops        the fitted sklearn Pipeline (skops format, not pickle)
-    <dir>/model_meta.json    version, decision threshold, metrics, trusted types
+    <dir>/model.skops              the fitted sklearn Pipeline (skops format, not pickle)
+    <dir>/model_meta.json          version, decision threshold, metrics, trusted types
+    <dir>/reference_profile.json   training-data distributions, for drift detection
 
 Only depends on skops, so the API can load a model without installing MLflow.
 """
@@ -17,6 +18,7 @@ from sklearn.pipeline import Pipeline
 
 MODEL_FILE = "model.skops"
 META_FILE = "model_meta.json"
+REFERENCE_FILE = "reference_profile.json"
 
 # Modules whose types we accept inside a saved model.
 TRUSTED_MODULE_PREFIXES = ("churn.", "numpy.", "sklearn.", "xgboost.", "scipy.")
@@ -36,12 +38,34 @@ def trusted_types_for(pipeline: Pipeline) -> list[str]:
     return untrusted
 
 
-def write_bundle(pipeline: Pipeline, meta: dict[str, Any], out_dir: Path) -> Path:
+def write_bundle(
+    pipeline: Pipeline,
+    meta: dict[str, Any],
+    out_dir: Path,
+    reference: dict[str, Any] | None = None,
+) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     meta = {**meta, "trusted_types": trusted_types_for(pipeline)}
     skops_io.dump(pipeline, out_dir / MODEL_FILE)
     (out_dir / META_FILE).write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    if reference is not None:
+        (out_dir / REFERENCE_FILE).write_text(json.dumps(reference), encoding="utf-8")
     return out_dir
+
+
+def load_meta(model_dir: Path) -> dict[str, Any]:
+    """Bundle metadata only (cheap: does not load the model)."""
+    return json.loads((Path(model_dir) / META_FILE).read_text(encoding="utf-8"))
+
+
+def load_reference(model_dir: Path) -> dict[str, Any]:
+    """The training-data profile used for drift detection (see churn.monitoring.drift)."""
+    path = Path(model_dir) / REFERENCE_FILE
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No reference profile at {path}. Re-export the model: `uv run churn-export`."
+        )
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_bundle(model_dir: Path) -> tuple[Pipeline, dict[str, Any]]:

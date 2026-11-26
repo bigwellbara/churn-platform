@@ -20,6 +20,8 @@ dependencies = [
 [project.scripts]
 churn-train = "churn.training.train:main"
 churn-export = "churn.training.export:main"
+churn-drift = "churn.monitoring.monitor:main"
+churn-simulate = "churn.monitoring.simulate:main"
 
 [dependency-groups]
 # Training and experiment tracking (not installed in the API image).
@@ -42,6 +44,10 @@ dev = [
     "ruff>=0.6",
     "black>=24.0",
     "httpx>=0.27",
+]
+# Load testing, kept out of CI: `uv run --group load locust ...` (see docs/LOAD_TEST.md)
+load = [
+    "locust==2.47.0",
 ]
 # Notebook tooling, kept out of CI: `uv sync --group eda`
 eda = [

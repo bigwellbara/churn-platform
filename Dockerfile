@@ -38,9 +38,13 @@ RUN useradd --create-home --uid 10001 app
 COPY --from=builder /app/.venv /app/.venv
 COPY models/champion /app/models/champion
 
+# INFERENCE_PROCESSES=2: the model runs in two worker processes, so it never competes with
+# the web server for the GIL and two batches can be scored at once
+# (see src/churn/api/inference.py and docs/LOAD_TEST.md).
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     MODEL_DIR=/app/models/champion \
+    INFERENCE_PROCESSES=2 \
     PORT=8000
 
 USER app

@@ -74,14 +74,24 @@ def raw_df() -> pd.DataFrame:
 
 
 @pytest.fixture(scope="session")
+def large_csv_path(tmp_path_factory):
+    """Big enough that resampling it does not create spurious drift (PSI is noisy on
+    small samples: noise ~ (bins - 1) * (1/n_reference + 1/n_window))."""
+    path = tmp_path_factory.mktemp("data") / "telco_large.csv"
+    make_synthetic_telco(n=4_000, seed=0).to_csv(path, index=False)
+    return path
+
+
+@pytest.fixture(scope="session")
 def model_bundle_dir(tmp_path_factory):
     """A real (tiny) model bundle, written exactly as churn-export would write one."""
     from churn.bundle import write_bundle
     from churn.config import RAW_FEATURES, TARGET
+    from churn.monitoring.drift import build_reference
     from churn.training.data import clean
     from churn.training.models import build_pipeline, build_xgboost
 
-    df = clean(make_synthetic_telco(n=500, seed=3))
+    df = clean(make_synthetic_telco(n=2_000, seed=3))
     X, y = df.drop(columns=[TARGET]), df[TARGET]
     pipeline = build_pipeline(build_xgboost(pos_weight=2.0, n_estimators=30)).fit(X, y)
     meta = {
@@ -93,7 +103,8 @@ def model_bundle_dir(tmp_path_factory):
         "features": RAW_FEATURES,
         "test_metrics": {"roc_auc": 0.8, "pr_auc": 0.6},
     }
-    return write_bundle(pipeline, meta, tmp_path_factory.mktemp("bundle"))
+    reference = build_reference(X, pipeline.predict_proba(X)[:, 1])
+    return write_bundle(pipeline, meta, tmp_path_factory.mktemp("bundle"), reference=reference)
 
 
 @pytest.fixture
