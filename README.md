@@ -4,10 +4,14 @@
 ![Deploy](https://github.com/bigwellbara/churn-platform/actions/workflows/deploy.yml/badge.svg)
 ![Uptime](https://github.com/bigwellbara/churn-platform/actions/workflows/uptime.yml/badge.svg)
 
-**▶ Live demo: [churn-api-latest-ofya.onrender.com/docs](https://churn-api-latest-ofya.onrender.com/docs)**
-(open `POST /predict` → **Try it out** → **Execute** to score an example customer).
-Hosted on a free instance: if nobody has used it recently, the first request can take up to
-two minutes while it wakes up.
+**▶ Live demo: [churn-platform-dusky.vercel.app](https://churn-platform-dusky.vercel.app)**:
+score a customer and see which retention offer lowers their risk,
+[rank a customer list](https://churn-platform-dusky.vercel.app/batch?sample=1), or
+[see how the model was chosen](https://churn-platform-dusky.vercel.app/model).
+
+**API:** [churn-api-latest-ofya.onrender.com/docs](https://churn-api-latest-ofya.onrender.com/docs)
+(interactive OpenAPI docs: `POST /predict` → **Try it out** → **Execute**). Both run on free
+tiers; if nobody has used the API recently, the first request can take up to two minutes.
 
 ```bash
 curl -X POST https://churn-api-latest-ofya.onrender.com/predict \

@@ -5,7 +5,8 @@ automatically, only after the new version has proved it works.
 
 | Target | Status | Cost |
 |---|---|---|
-| **Render** (free web service, Frankfurt) | live demo | free |
+| **Render** (free web service, Frankfurt): the API | live | free |
+| **Vercel** (Hobby): the dashboard, [churn-platform-dusky.vercel.app](https://churn-platform-dusky.vercel.app) | live; redeploys on every push to `main`, preview URL per pull request | free |
 | **Google Cloud Run** (Johannesburg) | pipeline ready, runs once a GCP project is configured | free tier, but GCP needs billing set up |
 
 ## The pipeline
