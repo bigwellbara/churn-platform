@@ -265,7 +265,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---------------------------------------------------------------- routes
     @app.get("/", include_in_schema=False)
     def root():
-        return {"service": "churn-prediction-api", "version": __version__, "docs": "/docs"}
+        return {
+            "service": "churn-prediction-api",
+            "version": __version__,
+            "git_sha": settings.git_sha,
+            "docs": "/docs",
+        }
 
     @app.get("/health", response_model=HealthResponse, tags=["ops"])
     def health(request: Request):

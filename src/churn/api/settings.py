@@ -35,3 +35,6 @@ class Settings(BaseSettings):
     max_micro_batch: int = 64
     # Prediction-log rows are buffered and written in bulk this often (seconds).
     log_flush_interval: float = 0.5
+    # Commit the image was built from (Docker build arg). GET / reports it so a deploy can
+    # verify the running revision is the one it just built.
+    git_sha: str = "unknown"
