@@ -16,7 +16,9 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload = {
             "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds"),
-            "level": record.levelname,
+            # "severity" (not "level") is the key Google Cloud Logging reads, so log lines
+            # from Cloud Run are filterable by level; INFO/WARNING/ERROR are valid values.
+            "severity": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
             **getattr(record, "fields", {}),

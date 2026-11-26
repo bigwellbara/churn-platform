@@ -89,3 +89,17 @@ def test_untrusted_types_are_refused(tmp_path):
         trusted_types_for(pipeline)
     with pytest.raises(RuntimeError):
         write_bundle(pipeline, {"model_version": "1", "decision_threshold": 0.5}, tmp_path)
+
+
+def test_json_log_lines_use_cloud_logging_fields():
+    import json
+    import logging
+
+    from churn.api.log_config import JsonFormatter
+
+    record = logging.LogRecord("churn.api", logging.WARNING, __file__, 1, "slow", None, None)
+    record.fields = {"latency_ms": 120.5}
+    line = json.loads(JsonFormatter().format(record))
+    assert line["severity"] == "WARNING"
+    assert line["message"] == "slow"
+    assert line["latency_ms"] == 120.5
