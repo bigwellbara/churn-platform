@@ -2,6 +2,7 @@
 
 ![CI](https://github.com/bigwellbara/churn-platform/actions/workflows/ci.yml/badge.svg)
 ![Deploy](https://github.com/bigwellbara/churn-platform/actions/workflows/deploy.yml/badge.svg)
+![Uptime](https://github.com/bigwellbara/churn-platform/actions/workflows/uptime.yml/badge.svg)
 
 An end-to-end, production-style machine learning system that predicts which telecom
 customers are likely to cancel (churn). It covers the full path from notebook to monitored,
@@ -9,7 +10,7 @@ deployed service: training pipeline, experiment tracking, a model registry, a Fa
 Docker, monitoring with drift detection, CI/CD, cloud deployment and a Next.js dashboard.
 
 > Status: **Week 4 complete**: model, prediction API, Docker, monitoring, drift detection,
-> load testing, and CI/CD to Google Cloud Run. See the [roadmap](#roadmap).
+> load testing, and CI/CD with automatic rollback. See the [roadmap](#roadmap).
 
 ## Problem
 
@@ -103,16 +104,20 @@ Details: [docs/MONITORING.md](docs/MONITORING.md). Performance work:
 
 ### CI/CD and deployment
 
-Every merge to `main` that passes CI deploys to **Google Cloud Run** (Johannesburg):
+Every merge to `main` that passes CI is built once, published to GitHub Container
+Registry, and deployed to **Render** (free tier). A **Google Cloud Run** pipeline is
+ready too, and runs once a GCP project is configured.
 
-- **CI** runs lint, tests, a **model quality gate** (`churn-gate`: minimum test metrics plus
-  behavioural checks on known customers), and builds the production image and smoke tests
-  it at Cloud Run's 1 vCPU / 1 GiB.
-- **Deploy** pushes the image and starts the new revision with **0% traffic**. It smoke
-  tests that revision on a private URL, and only then moves traffic to it. A failed
-  check means users never see the new version.
-- **No stored cloud keys:** GitHub authenticates to Google with short-lived OIDC tokens
-  (Workload Identity Federation), accepted only from this repository's `main` branch.
+- **CI** runs lint, tests and a **model quality gate** (`churn-gate`: minimum test metrics
+  plus behavioural checks on known customers). It also builds the production image and
+  smoke tests it at a 512 MB memory limit.
+- **Deploy** releases the image **by digest** and waits until the new commit is live.
+  It then smoke tests real predictions and **rolls back automatically** to the previous
+  image if any check fails. On Cloud Run, the new revision gets **0% traffic** until it
+  passes on a private URL.
+- **Uptime** (optional) runs the smoke test against production every 10 minutes.
+- **No stored cloud keys:** images are pushed with the job's own short-lived token.
+  Cloud Run uses OIDC Workload Identity Federation, limited to this repo's `main` branch.
 
 ```bash
 uv run churn-gate                                 # would this model be allowed to ship?
@@ -170,7 +175,8 @@ src/churn/
 models/champion/     exported bundle: model.skops, metadata, drift reference profile
 infra/               Prometheus config + alert rules, Grafana provisioning + dashboard,
                      gcp/bootstrap.sh (one-time cloud setup)
-.github/workflows/   ci.yml (tests, model gate, image smoke test), deploy.yml (Cloud Run)
+.github/workflows/   ci.yml (tests, model gate, image smoke test), deploy.yml (GHCR, Render,
+                     Cloud Run), uptime.yml (scheduled production smoke test)
 loadtest/            Locust load test, benchmarks, sampling profiler
 tests/               pytest suite (synthetic data)
 notebooks/           01_eda.ipynb: data exploration, model insights, fairness check
@@ -185,6 +191,7 @@ reports/             metrics.json from the latest training run
 - [x] Week 2: FastAPI service, Postgres logging, Docker and docker-compose
 - [x] Week 3: Prometheus, Grafana, drift detection, load testing
 - [ ] Grafana dashboard screenshots (image download blocked by network issues on build day)
-- [x] Week 4: model quality gate, image smoke tests, keyless CD to Cloud Run
+- [x] Week 4: model quality gate, image smoke tests, CD to Render with auto-rollback,
+      Cloud Run pipeline (keyless), uptime checks
 - [ ] Cloud prediction log + drift monitor (managed Postgres; see DEPLOYMENT.md)
 - [ ] Week 5: Next.js dashboard, docs, demo video

@@ -1,0 +1,35 @@
+name: Uptime
+
+# Synthetic monitoring: every 10 minutes, run the full smoke test (health, model, real
+# predictions, input validation) against production, so a broken deployment is noticed
+# even when nobody is using it. A failed run is a failed workflow, which GitHub emails.
+#
+# Side effect: Render's free instances sleep after 15 minutes without traffic and take
+# about two minutes to wake, so this also keeps the demo responsive. One always-awake
+# service uses ~744 of the 750 free instance hours per month, so it is opt-in: set the
+# repository variable KEEP_WARM=true. (GitHub pauses schedules in repositories with no
+# activity for 60 days.)
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: >-
+      vars.RENDER_SERVICE_URL != '' &&
+      (github.event_name == 'workflow_dispatch' || vars.KEEP_WARM == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          sparse-checkout: src/churn/smoke.py
+          sparse-checkout-cone-mode: false
+
+      - name: Smoke test production
+        run: python3 src/churn/smoke.py "${{ vars.RENDER_SERVICE_URL }}" --startup-timeout 420
