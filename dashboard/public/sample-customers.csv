@@ -1,0 +1,41 @@
+customerID,gender,SeniorCitizen,Partner,Dependents,tenure,PhoneService,MultipleLines,InternetService,OnlineSecurity,OnlineBackup,DeviceProtection,TechSupport,StreamingTV,StreamingMovies,Contract,PaperlessBilling,PaymentMethod,MonthlyCharges,TotalCharges
+SAMPLE-001,Female,1,Yes,No,53,Yes,No,DSL,No,Yes,No,No,No,No,Two year,Yes,Electronic check,55.21,2926.13
+SAMPLE-002,Female,0,No,No,23,Yes,No,Fiber optic,No,No,Yes,Yes,No,Yes,Month-to-month,Yes,Credit card (automatic),93.99,2161.77
+SAMPLE-003,Male,0,No,No,24,Yes,No,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Month-to-month,No,Mailed check,27.84,668.16
+SAMPLE-004,Male,1,Yes,Yes,15,Yes,No,Fiber optic,No,No,No,Yes,No,No,One year,Yes,Electronic check,76.64,1149.60
+SAMPLE-005,Female,1,No,No,25,No,No phone service,Fiber optic,Yes,No,Yes,Yes,Yes,Yes,Month-to-month,Yes,Electronic check,100.81,2520.25
+SAMPLE-006,Male,0,No,Yes,23,Yes,Yes,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Month-to-month,No,Bank transfer (automatic),25.60,588.80
+SAMPLE-007,Female,0,No,Yes,17,Yes,Yes,Fiber optic,Yes,No,Yes,Yes,No,No,Month-to-month,No,Electronic check,90.53,1539.01
+SAMPLE-008,Female,0,No,No,29,Yes,No,Fiber optic,Yes,No,No,No,No,Yes,Two year,No,Mailed check,87.08,2525.32
+SAMPLE-009,Male,0,Yes,No,4,Yes,Yes,Fiber optic,No,No,Yes,Yes,No,Yes,Month-to-month,Yes,Bank transfer (automatic),85.73,342.92
+SAMPLE-010,Female,0,Yes,No,36,No,No phone service,DSL,Yes,Yes,No,Yes,Yes,Yes,Two year,No,Mailed check,71.05,2557.80
+SAMPLE-011,Male,0,Yes,No,11,Yes,Yes,Fiber optic,No,No,No,No,No,Yes,Month-to-month,Yes,Mailed check,84.70,931.70
+SAMPLE-012,Male,0,No,No,55,Yes,No,Fiber optic,Yes,No,No,Yes,No,No,One year,Yes,Mailed check,84.91,4670.05
+SAMPLE-013,Male,1,No,No,59,Yes,No,DSL,No,Yes,Yes,No,No,Yes,One year,Yes,Credit card (automatic),66.28,3910.52
+SAMPLE-014,Female,0,No,Yes,28,Yes,No,Fiber optic,Yes,No,Yes,No,No,Yes,Month-to-month,Yes,Credit card (automatic),93.74,2624.72
+SAMPLE-015,Male,0,Yes,No,55,Yes,Yes,Fiber optic,No,No,Yes,Yes,No,No,Two year,No,Credit card (automatic),80.84,4446.20
+SAMPLE-016,Male,0,Yes,No,46,Yes,Yes,Fiber optic,Yes,Yes,No,Yes,No,Yes,Two year,No,Mailed check,93.62,4306.52
+SAMPLE-017,Male,0,No,Yes,63,Yes,No,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Two year,Yes,Credit card (automatic),26.70,1682.10
+SAMPLE-018,Male,0,No,Yes,58,Yes,Yes,Fiber optic,No,No,Yes,No,No,Yes,Two year,No,Credit card (automatic),86.75,5031.50
+SAMPLE-019,Male,1,No,Yes,16,Yes,No,DSL,Yes,No,Yes,No,No,Yes,Month-to-month,No,Electronic check,68.04,1088.64
+SAMPLE-020,Male,0,Yes,Yes,21,Yes,Yes,Fiber optic,No,Yes,Yes,Yes,No,No,Two year,Yes,Mailed check,85.38,1792.98
+SAMPLE-021,Male,0,No,No,6,Yes,Yes,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Month-to-month,No,Electronic check,20.64,123.84
+SAMPLE-022,Male,0,No,No,30,Yes,Yes,Fiber optic,No,No,No,No,No,No,One year,No,Bank transfer (automatic),76.64,2299.20
+SAMPLE-023,Female,0,Yes,No,19,Yes,Yes,Fiber optic,No,No,No,Yes,No,Yes,Month-to-month,Yes,Mailed check,88.87,1688.53
+SAMPLE-024,Female,0,Yes,No,13,Yes,Yes,Fiber optic,Yes,Yes,No,No,Yes,No,Two year,No,Credit card (automatic),91.20,1185.60
+SAMPLE-025,Female,0,No,No,64,Yes,No,DSL,No,Yes,No,No,Yes,No,Two year,No,Bank transfer (automatic),57.70,3692.80
+SAMPLE-026,Male,0,Yes,No,11,Yes,Yes,Fiber optic,No,Yes,No,No,No,Yes,Month-to-month,No,Mailed check,83.97,923.67
+SAMPLE-027,Male,0,Yes,No,26,Yes,Yes,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Month-to-month,Yes,Credit card (automatic),21.61,561.86
+SAMPLE-028,Female,0,No,No,28,No,No phone service,DSL,No,No,No,Yes,Yes,No,Month-to-month,No,Credit card (automatic),55.36,1550.08
+SAMPLE-029,Female,0,Yes,No,16,No,No phone service,DSL,No,Yes,No,No,No,No,Month-to-month,Yes,Electronic check,51.54,824.64
+SAMPLE-030,Female,0,No,No,1,Yes,No,Fiber optic,Yes,No,Yes,No,Yes,No,Month-to-month,Yes,Electronic check,87.34,87.34
+SAMPLE-031,Female,0,Yes,No,18,Yes,No,Fiber optic,No,No,No,No,No,Yes,Month-to-month,Yes,Credit card (automatic),76.05,1368.90
+SAMPLE-032,Female,0,No,No,10,No,No phone service,DSL,No,No,Yes,No,Yes,Yes,Month-to-month,No,Bank transfer (automatic),69.06,690.60
+SAMPLE-033,Female,0,Yes,No,13,Yes,No,Fiber optic,Yes,Yes,Yes,No,Yes,Yes,Month-to-month,Yes,Bank transfer (automatic),102.95,1338.35
+SAMPLE-034,Male,0,No,No,16,Yes,Yes,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Month-to-month,Yes,Mailed check,24.45,391.20
+SAMPLE-035,Female,0,Yes,No,55,Yes,Yes,DSL,No,No,Yes,No,Yes,No,Two year,No,Electronic check,57.41,3157.55
+SAMPLE-036,Male,0,Yes,No,17,Yes,No,DSL,No,Yes,No,No,Yes,Yes,Month-to-month,No,Mailed check,62.23,1057.91
+SAMPLE-037,Female,0,Yes,No,20,Yes,Yes,No,No internet service,No internet service,No internet service,No internet service,No internet service,No internet service,Month-to-month,No,Credit card (automatic),23.17,463.40
+SAMPLE-038,Male,1,Yes,Yes,27,Yes,No,Fiber optic,Yes,Yes,No,Yes,Yes,No,Two year,Yes,Electronic check,90.72,2449.44
+SAMPLE-039,Female,0,No,No,66,Yes,No,Fiber optic,No,No,Yes,Yes,No,Yes,Two year,No,Credit card (automatic),91.97,6070.02
+SAMPLE-040,Male,0,Yes,No,47,No,No phone service,Fiber optic,No,No,No,Yes,No,No,One year,Yes,Electronic check,78.74,3700.78

@@ -1,0 +1,71 @@
+{
+  "modelType": "xgboost_tuned",
+  "modelVersion": "1",
+  "threshold": 0.6055,
+  "exportedAt": "2026-11-25T10:52:30+00:00",
+  "selectionMetric": "val_pr_auc",
+  "test": {
+    "accuracy": 0.7871,
+    "precision": 0.5791,
+    "recall": 0.7246,
+    "f1": 0.6437,
+    "rocAuc": 0.8468,
+    "prAuc": 0.6629,
+    "tp": 271,
+    "fp": 197,
+    "fn": 103,
+    "tn": 838
+  },
+  "candidates": [
+    {
+      "name": "xgboost_tuned",
+      "valPrAuc": 0.6475,
+      "valRocAuc": 0.8391,
+      "valRecall": 0.7086,
+      "valPrecision": 0.5902,
+      "cvRocAucMean": 0.849,
+      "cvRocAucStd": 0.0117,
+      "overfitGap": 0.036
+    },
+    {
+      "name": "logistic_regression",
+      "valPrAuc": 0.6429,
+      "valRocAuc": 0.8359,
+      "valRecall": 0.7246,
+      "valPrecision": 0.5565,
+      "cvRocAucMean": 0.8479,
+      "cvRocAucStd": 0.0116,
+      "overfitGap": 0.0175
+    },
+    {
+      "name": "random_forest",
+      "valPrAuc": 0.6396,
+      "valRocAuc": 0.8374,
+      "valRecall": 0.6551,
+      "valPrecision": 0.6171,
+      "cvRocAucMean": 0.8474,
+      "cvRocAucStd": 0.0106,
+      "overfitGap": 0.089
+    },
+    {
+      "name": "xgboost",
+      "valPrAuc": 0.6336,
+      "valRocAuc": 0.8287,
+      "valRecall": 0.7032,
+      "valPrecision": 0.5502,
+      "cvRocAucMean": 0.8383,
+      "cvRocAucStd": 0.0101,
+      "overfitGap": 0.114
+    },
+    {
+      "name": "dummy_baseline",
+      "valPrAuc": 0.2654,
+      "valRocAuc": 0.5,
+      "valRecall": 1,
+      "valPrecision": 0.2654,
+      "cvRocAucMean": 0.5,
+      "cvRocAucStd": 0,
+      "overfitGap": 0
+    }
+  ]
+}
