@@ -89,8 +89,25 @@ wasted offer is known, the threshold should be re-chosen from those costs.
 
 Permutation importance (drop in validation PR-AUC when a column is shuffled): **tenure
 (0.124)**, **Contract (0.093)** and **InternetService (0.036)** dominate; ~10 features
-contribute almost nothing. Details are in `notebooks/01_eda.ipynb`. Per-customer
-explanations (SHAP) are a planned stretch goal.
+contribute almost nothing. Details are in `notebooks/01_eda.ipynb`.
+
+**Per-customer explanations** (`POST /predict/explain`, shown in the dashboard as "Why this
+score?"): exact SHAP values from XGBoost's built-in TreeSHAP (`pred_contribs=True`), not a
+post-hoc approximation. For each prediction, the starting score plus the contributions
+equals the model's log-odds, so the explanation fully accounts for the score; the
+deployment smoke test checks this on every release. The 48 model columns are summed back
+to the 19 input fields plus the two engineered features (additivity makes this exact).
+Examples from the shipped model:
+
+| Customer | Score | Largest pushes (log-odds) |
+|---|---|---|
+| New, month-to-month, fibre | 0.93 | tenure 1 month **+0.81**, month-to-month contract **+0.61**, total charges +0.33, no online security +0.20 |
+| Five years, two-year contract, same services | 0.09 | two-year contract **−1.57**, tenure 60 months **−0.68**, no online security +0.20 |
+
+Caveats: SHAP explains **the model**, not the customer. "Month-to-month raises risk"
+means the model learned that pattern from past customers, not that changing the contract
+causes someone to stay. Correlated inputs (tenure and total charges) share credit between
+them, so read them together.
 
 ## Limitations and risks
 

@@ -5,14 +5,14 @@ model: a retention team, not engineers.
 
 | Page | What it does |
 |---|---|
-| **Score a customer** (`/`) | Edit a customer and watch the churn probability update. The model also scores each retention offer (longer contract, autopay, support add-ons) for the same customer, so you can see which offer lowers the risk most. |
+| **Score a customer** (`/`) | Edit a customer and watch the churn probability update. **Why this score?** shows the answers that pushed it up or down most (exact SHAP values from `POST /predict/explain`). The model also scores each retention offer (longer contract, autopay, support add-ons) for the same customer, so you can see which offer lowers the risk most. |
 | **Score a list** (`/batch`) | Upload a CSV in the Telco format and get it back ranked by risk, with a summary and a download. The original Kaggle file works as-is; if it has a `Churn` column, the page shows how many real leavers the model caught. `/batch?sample=1` runs it on built-in sample data. |
 | **The model** (`/model`) | Test-set metrics in plain words, the confusion matrix, why the threshold is 61%, and how the model was chosen from five candidates. |
 
 ## How it talks to the API
 
 ```
-browser ──▶ Next.js /api/predict, /api/predict/batch, /api/health ──▶ FastAPI (Render)
+browser ──▶ Next.js /api/predict, /api/predict/batch, /api/predict/explain, /api/health ──▶ FastAPI (Render)
 ```
 
 The browser never calls the prediction API directly. The dashboard's own route handlers

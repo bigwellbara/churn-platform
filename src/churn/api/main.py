@@ -36,6 +36,7 @@ from churn.api.schemas import (
     BatchResponse,
     CustomerFeatures,
     ErrorResponse,
+    ExplanationResponse,
     HealthResponse,
     ModelInfoResponse,
     Prediction,
@@ -53,6 +54,8 @@ Predicts the probability that a telecom customer will churn.
 
 * `POST /predict`: score one customer
 * `POST /predict/batch`: score up to `MAX_BATCH_SIZE` customers in one call
+* `POST /predict/explain`: score one customer and show which answers pushed the score up
+  or down (exact SHAP values from the XGBoost model)
 * `GET /model`: which model version is serving, its threshold and test metrics
 
 When the server has an API key configured, send it in the `X-API-Key` header.
@@ -314,6 +317,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record(request, [customer], [prediction])
         return PredictionResponse(
             **prediction.model_dump(), model_version=model.version, threshold=model.threshold
+        )
+
+    @app.post(
+        "/predict/explain",
+        response_model=ExplanationResponse,
+        tags=["predictions"],
+        dependencies=[Depends(require_api_key)],
+        responses={501: {"model": ErrorResponse, "description": "Model type has no explainer"}},
+    )
+    async def predict_explain(customer: CustomerFeatures, request: Request):
+        """Score one customer and break the score down by feature.
+
+        Runs in the API process (not the inference workers): explanations are occasional,
+        interactive requests, and TreeSHAP for one row takes a few milliseconds. Not
+        written to the prediction log, so a dashboard that also calls /predict does not
+        count the same customer twice.
+        """
+        model: ModelService = request.app.state.model
+        if model.explainer is None:
+            raise HTTPException(
+                status_code=501,
+                detail=f"Explanations are not available for model type {model.model_type}",
+            )
+        explainer = model.explainer
+        features = customer.features()
+
+        def run():
+            return model.score([features])[0], explainer.explain(features)
+
+        probability, explanation = await run_in_threadpool(run)
+        [prediction] = model.to_predictions([customer], [probability])
+        return ExplanationResponse(
+            **prediction.model_dump(),
+            model_version=model.version,
+            threshold=model.threshold,
+            base_value=explanation.base_value,
+            contributions=[c.__dict__ for c in explanation.contributions],
         )
 
     @app.post(

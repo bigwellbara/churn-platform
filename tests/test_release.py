@@ -121,7 +121,35 @@ def test_smoke_checks_pass_against_a_live_api(live_api):
     log = smoke.run_checks(live_api, expect_sha="abc1234", startup_timeout=10)
     assert "serving the expected commit abc1234" in log
     assert any(line.startswith("batch ok") for line in log)
+    assert any(line.startswith("explain ok (top factor") for line in log)
     assert log[-1].startswith("input validation ok")
+
+
+def _patch_explain(monkeypatch, respond):
+    """Route /predict/explain through `respond(real_status, real_body)`; everything else
+    goes to the live server unchanged."""
+    real = smoke._request
+
+    def fake(base_url, path, *args, **kwargs):
+        status, body = real(base_url, path, *args, **kwargs)
+        return respond(status, body) if path == "/predict/explain" else (status, body)
+
+    monkeypatch.setattr(smoke, "_request", fake)
+
+
+def test_smoke_skips_explanations_on_versions_without_them(live_api, monkeypatch):
+    # A rollback target from before /predict/explain existed must still pass.
+    _patch_explain(monkeypatch, lambda status, body: (404, {"detail": "Not Found"}))
+    log = smoke.run_checks(live_api, startup_timeout=10)
+    assert "explain skipped (HTTP 404: not available in this version)" in log
+
+
+def test_smoke_rejects_explanations_that_do_not_add_up(live_api, monkeypatch):
+    _patch_explain(
+        monkeypatch, lambda status, body: (status, {**body, "base_value": body["base_value"] + 1})
+    )
+    with pytest.raises(smoke.SmokeTestError, match="not the model's log-odds"):
+        smoke.run_checks(live_api, startup_timeout=10)
 
 
 def test_smoke_detects_the_wrong_commit(live_api):

@@ -90,6 +90,7 @@ Without Docker: `uv run uvicorn churn.api.main:create_app --factory --reload`
 |---|---|
 | `POST /predict` | Score one customer |
 | `POST /predict/batch` | Score up to 1,000 customers in one call |
+| `POST /predict/explain` | Score one customer and show which answers pushed it up or down (exact SHAP values) |
 | `GET /model` | Serving model version, threshold, test metrics |
 | `GET /health` | Liveness, model version, database status |
 | `GET /metrics` | Prometheus metrics |
