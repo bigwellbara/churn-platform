@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { customerSchema, features, normalise, type Customer, type FeatureName } from "@/lib/customer";
 import { FIELD_INFO, PRESETS } from "@/lib/fields";
 import { applyLever, leversFor } from "@/lib/levers";
+import type { Contribution, ExplanationResponse } from "@/lib/explain";
 import { describeError, type BatchResponse, type Prediction } from "@/lib/predictions";
 import { CustomerForm } from "./CustomerForm";
+import { ExplanationChart } from "./ExplanationChart";
 import { LeverChart, type LeverResult } from "./LeverChart";
 import { RiskResult } from "./RiskResult";
 
@@ -13,6 +15,8 @@ interface Result {
   prediction: Prediction;
   threshold: number;
   levers: LeverResult[];
+  /** Null when the API cannot explain (older API version, or a non-tree model). */
+  contributions: Contribution[] | null;
 }
 
 type Status = "idle" | "loading" | "slow" | "error";
@@ -46,20 +50,29 @@ export function Scorer() {
     setStatus("loading");
     const slow = setTimeout(() => setStatus((s) => (s === "loading" ? "slow" : s)), SLOW_MS);
 
-    // One request scores the customer and every retention offer together.
+    // One request scores the customer and every retention offer together; a second, in
+    // parallel, explains the customer's own score.
     const levers = leversFor(c);
     const customers = [c, ...levers.map((l) => applyLever(c, l))].map(features);
-    try {
-      const res = await fetch("/api/predict/batch", {
+    const post = (path: string, payload: unknown) =>
+      fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customers }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       });
+    const explained = post("/api/predict/explain", features(c))
+      .then(async (res) => (res.ok ? ((await res.json()) as ExplanationResponse) : null))
+      .catch(() => null);
+    try {
+      const res = await post("/api/predict/batch", { customers });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(describeError(body, res.status));
       const batch = body as BatchResponse;
       const [current, ...rest] = batch.predictions;
+      // The explanation is a bonus: if it fails, the score still shows.
+      const explanation = await explained;
+      if (controller.signal.aborted) return;
       setResult({
         prediction: current!,
         threshold: batch.threshold,
@@ -68,6 +81,7 @@ export function Scorer() {
           label: l.label,
           probability: rest[i]!.churn_probability,
         })),
+        contributions: explanation?.contributions ?? null,
       });
       setError(null);
       setStatus("idle");
@@ -163,6 +177,29 @@ export function Scorer() {
               {error}
             </p>
           )}
+        </section>
+
+        <section className="rounded-xl border border-line bg-surface p-5" aria-labelledby="why-heading">
+          <h2 id="why-heading" className="font-semibold">
+            Why this score?
+          </h2>
+          <p className="mt-1 text-sm text-ink-2">
+            The answers that moved this customer&apos;s score most, according to the model.
+          </p>
+          <div className={`mt-5 transition-opacity ${busy && result ? "opacity-60" : ""}`}>
+            {result?.contributions ? (
+              <ExplanationChart contributions={result.contributions} />
+            ) : result ? (
+              <p className="text-sm text-ink-2">Explanations are not available from this API version.</p>
+            ) : (
+              <div className="h-40 animate-pulse rounded-lg bg-surface-2" aria-hidden="true" />
+            )}
+          </div>
+          <p className="mt-5 border-t border-line pt-3 text-xs text-ink-2">
+            Exact SHAP values from the XGBoost model: each bar is how far that answer pushed the
+            score from the model&apos;s starting point, and together they add up to the
+            prediction. They explain the model, not the customer&apos;s real reasons for leaving.
+          </p>
         </section>
 
         <section className="rounded-xl border border-line bg-surface p-5" aria-labelledby="levers-heading">

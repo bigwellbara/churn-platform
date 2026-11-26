@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
+from churn.api.explain import Explainer, ExplanationsUnavailable
 from churn.api.schemas import CustomerFeatures, Prediction
 from churn.bundle import load_bundle
 from churn.config import RAW_FEATURES
@@ -44,6 +45,12 @@ class ModelService:
         self.version = str(meta["model_version"])
         self.threshold = float(meta["decision_threshold"])
         self.model_type = meta.get("model_type", "unknown")
+        # Built at load time so a pipeline whose columns cannot be mapped back to input
+        # fields fails at startup, not on the first explanation request.
+        try:
+            self.explainer: Explainer | None = Explainer(pipeline)
+        except ExplanationsUnavailable:
+            self.explainer = None
 
     @classmethod
     def from_dir(cls, model_dir: Path, threads: int | None = 1) -> ModelService:

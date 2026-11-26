@@ -115,6 +115,24 @@ class PredictionResponse(Prediction):
     threshold: float
 
 
+class Contribution(BaseModel):
+    feature: str = Field(description="Input field, or engineered feature, it is attributed to")
+    value: str | int | float = Field(description="This customer's value for that feature")
+    impact: float = Field(
+        description="Push on the score in log-odds: positive raises churn risk, negative lowers it"
+    )
+
+
+class ExplanationResponse(PredictionResponse):
+    base_value: float = Field(
+        description="The model's starting score in log-odds, before any of this customer's answers"
+    )
+    contributions: list[Contribution] = Field(
+        description="Every feature, largest effect first. base_value + sum(impact) equals "
+        "log(p / (1 - p)) for the predicted probability p (exact up to rounding)."
+    )
+
+
 class BatchResponse(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     model_version: str

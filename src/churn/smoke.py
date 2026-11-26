@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
@@ -156,6 +157,28 @@ def run_checks(
         "batch and single predictions disagree for the same customer",
     )
     log.append("batch ok (matches single prediction)")
+
+    status, explained = _request(base_url, "/predict/explain", CUSTOMER, api_key=api_key)
+    if status in (404, 501):
+        # 404: a version from before explanations existed (e.g. while verifying a rollback);
+        # 501: a model type without an explainer. Neither is a broken deployment.
+        log.append(f"explain skipped (HTTP {status}: not available in this version)")
+    else:
+        _check(status == 200, f"POST /predict/explain returned {status}: {explained}")
+        _check(
+            abs(explained.get("churn_probability", -1) - p) < 1e-9,
+            "explanation and prediction disagree for the same customer",
+        )
+        contributions = explained.get("contributions", [])
+        _check(len(contributions) > 0, "explanation has no contributions")
+        # SHAP values are additive: base + contributions must rebuild the score (log-odds).
+        total = explained["base_value"] + sum(c["impact"] for c in contributions)
+        _check(
+            0 < p < 1 and abs(total - math.log(p / (1 - p))) < 0.01,
+            f"contributions add up to {total:.4f}, not the model's log-odds",
+        )
+        top = contributions[0]
+        log.append(f"explain ok (top factor {top['feature']} {top['impact']:+.2f})")
 
     bad = {**CUSTOMER, "tenure": -5}
     status, _ = _request(base_url, "/predict", bad, api_key=api_key)
