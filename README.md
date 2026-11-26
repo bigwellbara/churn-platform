@@ -4,6 +4,23 @@
 ![Deploy](https://github.com/bigwellbara/churn-platform/actions/workflows/deploy.yml/badge.svg)
 ![Uptime](https://github.com/bigwellbara/churn-platform/actions/workflows/uptime.yml/badge.svg)
 
+**▶ Live demo: [churn-api-latest-ofya.onrender.com/docs](https://churn-api-latest-ofya.onrender.com/docs)**
+(open `POST /predict` → **Try it out** → **Execute** to score an example customer).
+Hosted on a free instance: if nobody has used it recently, the first request can take up to
+two minutes while it wakes up.
+
+```bash
+curl -X POST https://churn-api-latest-ofya.onrender.com/predict \
+  -H "Content-Type: application/json" \
+  -d '{"gender": "Female", "SeniorCitizen": 0, "Partner": "Yes", "Dependents": "No",
+       "tenure": 1, "PhoneService": "No", "MultipleLines": "No phone service",
+       "InternetService": "DSL", "OnlineSecurity": "No", "OnlineBackup": "Yes",
+       "DeviceProtection": "No", "TechSupport": "No", "StreamingTV": "No",
+       "StreamingMovies": "No", "Contract": "Month-to-month", "PaperlessBilling": "Yes",
+       "PaymentMethod": "Electronic check", "MonthlyCharges": 29.85, "TotalCharges": 29.85}'
+# {"customer_id":null,"churn_probability":0.868316,"churn_prediction":true,"risk_level":"high","model_version":"1","threshold":0.6055}
+```
+
 An end-to-end, production-style machine learning system that predicts which telecom
 customers are likely to cancel (churn). It covers the full path from notebook to monitored,
 deployed service: training pipeline, experiment tracking, a model registry, a FastAPI service,
