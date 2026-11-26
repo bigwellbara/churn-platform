@@ -14,6 +14,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://churn:${POSTGRES_PASSWORD:-churn}@db:5432/churn
       LOG_LEVEL: INFO
+      # Model in 2 worker processes: the configuration measured in docs/LOAD_TEST.md.
+      INFERENCE_PROCESSES: "2"
       # API_KEY: set this to require an X-API-Key header on /predict endpoints
     depends_on:
       db:

@@ -38,13 +38,14 @@ RUN useradd --create-home --uid 10001 app
 COPY --from=builder /app/.venv /app/.venv
 COPY models/champion /app/models/champion
 
-# INFERENCE_PROCESSES=2: the model runs in two worker processes, so it never competes with
-# the web server for the GIL and two batches can be scored at once
-# (see src/churn/api/inference.py and docs/LOAD_TEST.md).
+# INFERENCE_PROCESSES=0: the model runs inside the API process. Smallest memory and fastest
+# cold start, right for small (free-tier) instances. For sustained high load, set it to 2
+# (compose.yaml does): worker processes avoid GIL contention with the web server
+# (see src/churn/api/inference.py, docs/LOAD_TEST.md and docs/DEPLOYMENT.md).
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     MODEL_DIR=/app/models/champion \
-    INFERENCE_PROCESSES=2 \
+    INFERENCE_PROCESSES=0 \
     PORT=8000
 
 USER app
