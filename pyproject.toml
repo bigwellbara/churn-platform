@@ -61,10 +61,11 @@ eda = [
 [tool.uv]
 # Plain `uv sync` installs everything for local work; Docker picks only what it needs.
 default-groups = ["dev", "train", "api"]
-# Supply-chain cooldown: ignore package releases newer than this date. Brand-new
-# releases are where breaking bugs and compromised uploads tend to appear. Bump it
-# deliberately when upgrading.
-exclude-newer = "2026-11-11T00:00:00Z"
+# Supply-chain cooldown: when resolving, ignore releases less than 14 days old. Brand-new
+# releases are where breaking bugs and compromised uploads tend to appear. A rolling
+# window (not a fixed date) matches Dependabot's 14-day cooldown, so its update PRs can
+# resolve. Installs still use the exact versions pinned in uv.lock.
+exclude-newer = "14 days"
 
 [build-system]
 requires = ["hatchling"]

@@ -24,3 +24,8 @@ updates:
     directory: /
     schedule: { interval: weekly }
     cooldown: { default-days: 14 }
+    ignore:
+      # The project targets Python 3.11 (requires-python, uv.lock). Take 3.11.x security
+      # patches only; moving to a newer Python is a deliberate change, not a bot PR.
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
