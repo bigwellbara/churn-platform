@@ -1,14 +1,15 @@
 # Churn Prediction Platform
 
 ![CI](https://github.com/bigwellbara/churn-platform/actions/workflows/ci.yml/badge.svg)
+![Deploy](https://github.com/bigwellbara/churn-platform/actions/workflows/deploy.yml/badge.svg)
 
 An end-to-end, production-style machine learning system that predicts which telecom
 customers are likely to cancel (churn). It covers the full path from notebook to monitored,
 deployed service: training pipeline, experiment tracking, a model registry, a FastAPI service,
 Docker, monitoring with drift detection, CI/CD, cloud deployment and a Next.js dashboard.
 
-> Status: **Week 3 complete**: model, prediction API, Docker, monitoring, drift detection
-> and load testing. See the [roadmap](#roadmap).
+> Status: **Week 4 complete**: model, prediction API, Docker, monitoring, drift detection,
+> load testing, and CI/CD to Google Cloud Run. See the [roadmap](#roadmap).
 
 ## Problem
 
@@ -100,6 +101,27 @@ docker compose exec drift churn-drift --once   # PSI per feature
 Details: [docs/MONITORING.md](docs/MONITORING.md). Performance work:
 [docs/LOAD_TEST.md](docs/LOAD_TEST.md).
 
+### CI/CD and deployment
+
+Every merge to `main` that passes CI deploys to **Google Cloud Run** (Johannesburg):
+
+- **CI** runs lint, tests, a **model quality gate** (`churn-gate`: minimum test metrics plus
+  behavioural checks on known customers), and builds the production image and smoke tests
+  it at Cloud Run's 1 vCPU / 1 GiB.
+- **Deploy** pushes the image and starts the new revision with **0% traffic**. It smoke
+  tests that revision on a private URL, and only then moves traffic to it. A failed
+  check means users never see the new version.
+- **No stored cloud keys:** GitHub authenticates to Google with short-lived OIDC tokens
+  (Workload Identity Federation), accepted only from this repository's `main` branch.
+
+```bash
+uv run churn-gate                                 # would this model be allowed to ship?
+python src/churn/smoke.py https://<service-url>   # check any running deployment
+```
+
+Details, including the reasoning behind each setting and the costs:
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Results
 
 Tuned XGBoost, held-out test set (1,409 customers), decision threshold 0.606:
@@ -143,12 +165,16 @@ src/churn/
   api/               FastAPI app, schemas, micro-batching, worker-process inference,
                      write-behind Postgres log, Prometheus metrics, JSON logs
   monitoring/        PSI drift detection, drift monitor service, traffic simulator
+  gate.py            model quality gate run in CI (churn-gate)
+  smoke.py           deployment smoke test (stdlib only)
 models/champion/     exported bundle: model.skops, metadata, drift reference profile
-infra/               Prometheus config + alert rules, Grafana provisioning + dashboard
+infra/               Prometheus config + alert rules, Grafana provisioning + dashboard,
+                     gcp/bootstrap.sh (one-time cloud setup)
+.github/workflows/   ci.yml (tests, model gate, image smoke test), deploy.yml (Cloud Run)
 loadtest/            Locust load test, benchmarks, sampling profiler
 tests/               pytest suite (synthetic data)
 notebooks/           01_eda.ipynb: data exploration, model insights, fairness check
-docs/                TRAINING, MODEL_CARD, MONITORING, LOAD_TEST
+docs/                TRAINING, MODEL_CARD, MONITORING, LOAD_TEST, DEPLOYMENT
 reports/             metrics.json from the latest training run
 ```
 
@@ -159,5 +185,6 @@ reports/             metrics.json from the latest training run
 - [x] Week 2: FastAPI service, Postgres logging, Docker and docker-compose
 - [x] Week 3: Prometheus, Grafana, drift detection, load testing
 - [ ] Grafana dashboard screenshots (image download blocked by network issues on build day)
-- [ ] Week 4: CD pipeline and cloud deployment
+- [x] Week 4: model quality gate, image smoke tests, keyless CD to Cloud Run
+- [ ] Cloud prediction log + drift monitor (managed Postgres; see DEPLOYMENT.md)
 - [ ] Week 5: Next.js dashboard, docs, demo video
