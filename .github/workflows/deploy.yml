@@ -1,0 +1,169 @@
+name: Deploy
+
+# Continuous delivery to Google Cloud Run, after CI passes on main.
+#
+#   build image â”€â–¶ push to Artifact Registry â”€â–¶ deploy new revision with 0% traffic
+#   â”€â–¶ smoke test that revision on its private tag URL â”€â–¶ move 100% traffic to it
+#   â”€â–¶ smoke test the public URL
+#
+# If the candidate fails its smoke test, traffic never moves: users stay on the previous
+# revision and nothing needs rolling back. No long-lived keys: GitHub proves who it is to
+# Google with a short-lived OIDC token (Workload Identity Federation). One-time setup:
+# infra/gcp/bootstrap.sh. Full write-up: docs/DEPLOYMENT.md.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # manual redeploy of the current main
+
+# One deploy at a time, and never cancel one half-way through a traffic switch.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # lets the job request a GitHub OIDC token for Google
+
+env:
+  SERVICE: churn-api
+  REPOSITORY: churn
+
+jobs:
+  deploy:
+    # CI must have passed on a push to main (pull-request runs never deploy).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.candidate.outputs.service_url }}
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      RUNTIME_SA: ${{ vars.GCP_RUNTIME_SA }}
+    steps:
+      - name: Check configuration
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          DEPLOY_SA: ${{ vars.GCP_DEPLOY_SA }}
+        run: |
+          missing=0
+          for name in PROJECT_ID REGION RUNTIME_SA WIF_PROVIDER DEPLOY_SA; do
+            if [ -z "${!name}" ]; then echo "::error::Repository variable for $name is not set"; missing=1; fi
+          done
+          if [ "$missing" = 1 ]; then
+            echo "::error::Run infra/gcp/bootstrap.sh once to create the GCP resources and set these."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.SHA }} # exactly the commit CI tested
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3.0.1
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Build and push image
+        id: image
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:${{ env.SHA }}
+          build-args: GIT_SHA=${{ env.SHA }}
+          labels: |
+            org.opencontainers.image.revision=${{ env.SHA }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy candidate revision (no traffic yet)
+        id: candidate
+        env:
+          # Deploy by digest, not tag: the revision runs exactly the bytes we just pushed.
+          IMAGE: ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}@${{ steps.image.outputs.digest }}
+        run: |
+          TAG="sha-${SHA:0:7}"
+          if gcloud run services describe "$SERVICE" --region "$REGION" >/dev/null 2>&1; then
+            TRAFFIC=(--no-traffic)
+          else
+            TRAFFIC=()  # first ever deploy: a brand-new service must take the traffic
+            echo "::notice::Service does not exist yet; this first deploy goes live directly."
+          fi
+
+          # 1 vCPU / 1 GiB, scale to zero, at most 2 instances (a hard cost ceiling).
+          # INFERENCE_PROCESSES=0 runs the model in-process: a worker process adds ~4 s to
+          # every cold start (6 s -> 10 s measured at 1 vCPU), and scale-to-zero means
+          # cold starts are what demo visitors actually hit. See docs/DEPLOYMENT.md.
+          gcloud run deploy "$SERVICE" \
+            --image "$IMAGE" \
+            --region "$REGION" \
+            --service-account "$RUNTIME_SA" \
+            --allow-unauthenticated \
+            --port 8000 \
+            --execution-environment gen2 \
+            --cpu 1 --memory 1Gi --cpu-boost \
+            --concurrency 40 --min-instances 0 --max-instances 2 --timeout 30 \
+            --set-env-vars "INFERENCE_PROCESSES=0,LOG_LEVEL=INFO" \
+            --labels "app=churn-platform,git-sha=${SHA:0:7}" \
+            --tag "$TAG" "${TRAFFIC[@]}" \
+            --quiet
+
+          DESC=$(gcloud run services describe "$SERVICE" --region "$REGION" --format=json)
+          REVISION=$(jq -r --arg t "$TAG" '.status.traffic[] | select(.tag==$t) | .revisionName' <<<"$DESC")
+          CANDIDATE_URL=$(jq -r --arg t "$TAG" '.status.traffic[] | select(.tag==$t) | .url' <<<"$DESC")
+          SERVICE_URL=$(jq -r '.status.url' <<<"$DESC")
+          echo "Candidate $REVISION at $CANDIDATE_URL"
+          {
+            echo "tag=$TAG"
+            echo "revision=$REVISION"
+            echo "candidate_url=$CANDIDATE_URL"
+            echo "service_url=$SERVICE_URL"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test candidate (users still on the previous revision)
+        run: python3 src/churn/smoke.py "${{ steps.candidate.outputs.candidate_url }}" --expect-sha "$SHA"
+
+      - name: Promote candidate to 100% of traffic
+        run: |
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" \
+            --to-revisions "${{ steps.candidate.outputs.revision }}=100" --quiet
+
+      - name: Smoke test production URL
+        run: python3 src/churn/smoke.py "${{ steps.candidate.outputs.service_url }}" --expect-sha "$SHA"
+
+      - name: Remove the candidate tag
+        run: |
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" \
+            --remove-tags "${{ steps.candidate.outputs.tag }}" --quiet
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy ${SHA:0:7}: ${{ job.status }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Revision | \`${{ steps.candidate.outputs.revision }}\` |"
+            echo "| Service | ${{ steps.candidate.outputs.service_url }} |"
+            echo "| Image digest | \`${{ steps.image.outputs.digest }}\` |"
+            echo ""
+            echo "If the candidate smoke test failed, production traffic was never moved."
+          } >> "$GITHUB_STEP_SUMMARY"

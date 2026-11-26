@@ -22,6 +22,8 @@ churn-train = "churn.training.train:main"
 churn-export = "churn.training.export:main"
 churn-drift = "churn.monitoring.monitor:main"
 churn-simulate = "churn.monitoring.simulate:main"
+churn-gate = "churn.gate:main"
+churn-smoke = "churn.smoke:main"
 
 [dependency-groups]
 # Training and experiment tracking (not installed in the API image).

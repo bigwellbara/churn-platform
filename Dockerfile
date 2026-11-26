@@ -51,6 +51,11 @@ USER app
 WORKDIR /app
 EXPOSE 8000
 
+# The commit this image was built from; GET / reports it. Declared last so that a new
+# commit only rebuilds this tiny layer, not the dependency layers above.
+ARG GIT_SHA=unknown
+ENV GIT_SHA=${GIT_SHA}
+
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health', timeout=2)"
 
